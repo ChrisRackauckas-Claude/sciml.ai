@@ -197,6 +197,52 @@ solvers in a standard SciMLBenchmarks benchmark build.
 
 **Reviewers**: Chris Rackauckas
 
+## Fix and Update the AdaptiveSDE Benchmark Set (\$200)
+
+**In Progress**: Claimed by Jitendra Verma for the time period of June 19, 2026 - July 19, 2026.
+
+The [AdaptiveSDE benchmarks](https://github.com/SciML/SciMLBenchmarks.jl/tree/master/benchmarks/AdaptiveSDE)
+(`AdaptiveEfficiencyTests.jmd` and `qmaxDetermination.jmd`) compare the adaptive
+stepsize rejection sampling with memory (RSwM) algorithms and `qmax` settings for
+the SRIW1 adaptive SDE solver. These benchmarks no longer build, and the core
+blocker is that they drive parallelism manually with `Distributed`
+(`addprocs(2)`, `@everywhere`, and `ParallelDataTransfer.sendto(workers(), ...)`),
+which the Weave-based SciMLBenchmarks build does not reliably execute — workers do
+not survive the weave and process state is not transferred. The primary fix is to
+remove the manual worker management and express the Monte Carlo runs through the
+standard `EnsembleProblem` interface (e.g. `EnsembleThreads()`, or a
+weave-compatible `EnsembleDistributed()`), which the code already partially uses.
+
+On top of that, the benchmarks have bitrotted against the current SciML interfaces:
+`qmaxDetermination.jmd` still imports the removed `DiffEqMonteCarlo` package, both
+files call `DiffEqBase.calculate_monte_errors` (which has since moved out of
+`DiffEqBase`), and the `SDEProblemLibrary` problem accessors and solver keyword
+arguments need updating. The goal is to make both benchmarks weave to completion
+under the standard build and regenerate their work-precision/efficiency diagrams on
+current SciML interfaces.
+
+**Information to Get Started**: The
+[Contributing Section of the SciMLBenchmarks README](https://github.com/SciML/SciMLBenchmarks.jl?tab=readme-ov-file#contributing)
+describes how to contribute to the benchmarks. The benchmark results are generated
+using the benchmark server. Start by replacing the manual `Distributed` /
+`ParallelDataTransfer` plumbing with the ensemble interface so the files weave under
+the build server; then port the Monte Carlo error calculations to the current
+ensemble-error API, update the `Project.toml`/`Manifest.toml` dependencies, and
+verify both files weave to completion.
+
+**Related Issues**: [https://github.com/SciML/SciMLBenchmarks.jl/issues/126](https://github.com/SciML/SciMLBenchmarks.jl/issues/126)
+
+**Success Criteria**: Both `AdaptiveEfficiencyTests.jmd` and `qmaxDetermination.jmd`
+weave to completion in the standard SciMLBenchmarks build (without relying on manual
+`addprocs`/`@everywhere` worker management) and regenerate their
+efficiency/work-precision diagrams using current SciML interfaces.
+
+**Recommended Skills**: Familiarity with Julia and the SciML ecosystem; basic
+knowledge of stochastic differential equations and adaptive solvers; comfort with
+Julia's `Distributed`/ensemble parallelism and the Weave build pipeline.
+
+**Reviewers**: Chris Rackauckas
+
 # Successful Projects Archive
 
 These are the previous SciML small grants projects which have successfully concluded and paid out.
