@@ -52,9 +52,9 @@ target residual = 1.78e-15
 ```
 
 `ArcLengthContinuation` parameterizes by arclength along the solution curve instead of by `λ`, so
-reversing direction isn't a special case that needs handling, it's just continuing to walk forward along
-the curve. Instrumenting the residual evaluations confirms it climbs past the first turning point and
-then heads back down, exactly as the geometry demands. A natural-parameter method that only ever
+reversing direction needs no special handling. The solver just keeps walking forward along the curve.
+Instrumenting the residual evaluations confirms it climbs past the first turning point and then heads
+back down, exactly as the geometry demands. A natural-parameter method that only ever
 increases `λ` walks off the end of the lower sheet at the fold and fails.
 
 Currently released, alongside `ArcLengthContinuation` (which also takes `predictor = :tangent` for a true
@@ -72,7 +72,8 @@ homotopy continuation. When a Newton iteration inside an implicit solver fails t
 is to cut `dt` and try again, and this is a more principled version of the same instinct. It ships in
 `OrdinaryDiffEqNonlinearSolve` v2.4.0 and not the umbrella, so you want
 `using OrdinaryDiffEqNonlinearSolve: HomotopyNonlinearSolveAlg`. Meanwhile ModelingToolkit now routes DAE
-and ODE initialization through the continuation solver. That is a natural fit. Consistent initialization
+and ODE initialization through the continuation solver. The fit there is obvious once you say it out
+loud. Consistent initialization
 of a DAE is the problem of solving a hard nonlinear system from a guess that might be poor, and
 initialization failure has been one of the most common ways a large acausal model refuses to run at all.
 
@@ -140,16 +141,16 @@ stabilized methods.
 ## LinearSolve v5
 
 `SupernodalLUFactorization` is a pure-Julia supernodal LU, a Schenk–Gärtner-style algorithm via
-PurePardiso.jl. The interesting thing about it isn't raw speed, it's that there's no SuiteSparse C
-dependency anywhere in the path. That matters if you are doing static compilation or trimming, and it
+PurePardiso.jl. What makes it interesting is not raw speed but the absence of any SuiteSparse C
+dependency in the path. That matters if you are doing static compilation or trimming, and it
 matters if your element type is something the C libraries have never heard of.
 
 On a 2D five-point Laplacian, median of three runs after warmup, it's competitive. At n = 4,900 it takes
 0.019s against UMFPACK's 0.174s and KLU's 0.012s, and by n = 10,000 the three have converged to roughly
 0.047s, 0.049s and 0.039s respectively, with relative residuals around 1e-13 for all of them. That's why
 the structured-sparse default LU now routes to it. On an unstructured matrix with random fill I measured
-it slower than UMFPACK, 1.12s against 0.52s at n = 4,000. That is about what you would expect from a
-supernodal algorithm handed a matrix with no supernodes to find. The default polyalgorithm exists so you
+it slower than UMFPACK, 1.12s against 0.52s at n = 4,000, about what you would expect from a supernodal
+algorithm handed a matrix with no supernodes to find. The default polyalgorithm exists so you
 don't have to make this call yourself.
 
 The other addition is a whole new problem type. `EigenvalueProblem`, with `EigenvalueSolution` and
