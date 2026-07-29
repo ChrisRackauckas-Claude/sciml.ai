@@ -32,7 +32,7 @@ more importantly it's how you handle a solution branch that folds back on itself
 cannot do that however small you make the steps.
 
 The fold case is the one to look at. Take `u³ - 3u = -3 + 6λ` over `λ ∈ [0, 1]`. There are
-turning points at `u = ±1`, which is `λ = 1/6` and `λ = 5/6`. Getting from the `λ = 0` root on the lower
+turning points at `u = ±1`, that is at `λ = 1/6` and `λ = 5/6`. Getting from the `λ = 0` root on the lower
 sheet to the `λ = 1` root on the upper sheet along the connected branch means `λ` has to climb to 5/6,
 reverse all the way back down to 1/6, and only then go up to 1:
 
@@ -132,8 +132,8 @@ Also newly available: `Rodas4PW`, a W-method variant of `Rodas4P`, in the same p
 and `ARS443` from Ascher–Ruuth–Spiteri, plus Boscarino–Russo's `BHR553`. Those are the right shape for
 convection–diffusion problems where you want one operator implicit and the other explicit. And
 `ESDIRK325L2SA`, the Kennedy–Carpenter 2019 method, joins the existing `ESDIRK436L2SA2`,
-`ESDIRK437L2SA`, `ESDIRK547L2SA2`, `ESDIRK54I8L2SA` and `ESDIRK659L2SA` family, which also picked up a
-generic stage-predictor menu.
+`ESDIRK437L2SA`, `ESDIRK547L2SA2`, `ESDIRK54I8L2SA` and `ESDIRK659L2SA` family. That family also picked
+up a generic stage-predictor menu.
 
 On `master` but not yet tagged: `MSRK10`, Stepanov's order-10 explicit RK, and the Runge–Kutta–Gegenbauer
 stabilized methods.
@@ -185,7 +185,7 @@ SciMLSensitivity gained adjoint sensitivity support for fully implicit `DAEProbl
 and Hessenberg index-2 systems. This closes a gap that had been open a long time: you could already
 differentiate mass-matrix ODEs, but fully implicit `f(du, u, p, t) = 0` formulations weren't covered,
 which meant anyone whose model was naturally written that way had to reformulate it before they could
-calibrate or optimize anything. Alongside it there's `SundialsAdjoint`, which drives the CVODES C adjoint
+calibrate or optimize anything. Alongside it there's `SundialsAdjoint`, driving the CVODES C adjoint
 interface directly instead of reimplementing it, and an `EnzymeVJP` dispatch for SDE adjoints with
 non-diagonal noise.
 
