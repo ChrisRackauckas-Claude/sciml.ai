@@ -141,29 +141,9 @@ Identical across a 10x range of `gamma`, where on v6 those four runs would have 
 `totally_bogus_kwarg` errored correctly, so this was specific to the controller names having been left in
 the allowlist after the code that consumed them was removed.
 
-SciMLBase v3.40 fixes this. On a current environment you get a real error that names the replacement
-instead of silence:
-
-```
-Unrecognized keyword arguments: [:gamma]
-
-These are step size controller options, which are no longer set as keyword arguments to
-`solve`. They are now fields of the controller object, passed via the `controller` keyword:
-
-    # old
-    solve(prob, alg; gamma = 0.9, beta1 = 0.7, beta2 = -0.4)
-
-    # new
-    using OrdinaryDiffEqCore: PIController
-    solve(prob, alg; controller = PIController(0.7, -0.4))
-```
-
-The reason this section is still here rather than deleted: if you are pinned to SciMLBase v3.39 or
-earlier, everything above still applies to you and nothing will warn you about it. Grep for those names
-in your `solve` calls before you conclude you're fine. On v3.40 and later the solver does the grepping
-for you.
-
-Either way the migration is the same, and it's to put them on the controller object:
+SciMLBase v3.40 removes them from the accepted list, so you get a real error instead. On v3.39 and
+earlier you don't, so grep for those names in your `solve` calls. Either way the migration is to put
+them on the controller object:
 
 ```julia
 # v6
