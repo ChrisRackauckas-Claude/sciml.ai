@@ -19,7 +19,8 @@ you move on. The ones that matter are the handful where your code keeps running 
 means something else. There are three of those and they are what the first half of this post is about.
 
 Everything below was run against OrdinaryDiffEq v7.1.3, SciMLBase v3.39.1 and RecursiveArrayTools v4.3.4
-on Julia 1.11. The outputs are what those versions actually print, not what I remember them printing.
+on Julia 1.11, and re-checked against OrdinaryDiffEq v7.2.0 when that came out. The outputs are what
+those versions actually print, not what I remember them printing.
 
 ## The silent ones
 
@@ -153,10 +154,27 @@ using OrdinaryDiffEqCore: PIController
 solve(prob, alg; controller = PIController(0.7, -0.4))
 ```
 
-That `using OrdinaryDiffEqCore` is not a typo, incidentally; see the section on imports below. This is
-tracked as [OrdinaryDiffEq.jl#4027](https://github.com/SciML/OrdinaryDiffEq.jl/issues/4027) and the fix
-is to make these error properly, so at some point in the v7 series this section will become obsolete and
-you'll get a real error message instead. Until then it's on you to check.
+That `using OrdinaryDiffEqCore` is not a typo, incidentally; see the section on imports below.
+
+This was tracked as [OrdinaryDiffEq.jl#4027](https://github.com/SciML/OrdinaryDiffEq.jl/issues/4027) and
+it has since been fixed in [SciMLBase#1471](https://github.com/SciML/SciMLBase.jl/pull/1471). That takes
+all eight names back out of the accepted-keyword list. Once it ships you get a real error instead of
+silence, and the error points at the controller object instead of dumping the whole allowed-keyword list
+at you:
+
+```
+Unrecognized keyword arguments: [:gamma]
+
+These are step size controller options, which are no longer set as keyword arguments to
+`solve`. They are now fields of the controller object, passed via the `controller` keyword:
+...
+```
+
+The important caveat is that the fix is merged but **not yet released**. The newest SciMLBase in the
+General registry is v3.39.1, and re-running the `gamma` sweep above on today's releases (SciMLBase
+v3.39.1 with OrdinaryDiffEq v7.2.0) still gives 5597 steps for every value. So for the moment everything
+in this section stands and the grep is still on you. Once SciMLBase v3.40 lands you can stop worrying
+about it, because the solver will start complaining on your behalf.
 
 ## The loud ones
 
