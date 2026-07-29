@@ -226,9 +226,9 @@ would be misleading to leave the paragraph above sitting there without an update
 v11.36, SymbolicCompilerPasses.jl is still not turned on by default from the ModelingToolkit compiler;
 it remains opt-in. The Reactant.jl integration is likewise still waiting on the upstream issue linked
 above, which is [open](https://github.com/EnzymeAD/Reactant.jl/issues/1864) at the time of writing. What
-has landed in the meantime is a steady stream of array handling work on the ModelingToolkit side —
+has landed in the meantime is a steady stream of array handling work on the ModelingToolkit side:
 preserving arrays through flattened variable lookup, propagating array parameter assignments into SCC
-subsystems, dropping scalarization out of observed-function codegen — so the foundation is real and is
+subsystems, dropping scalarization out of observed-function codegen. So the foundation is real and is
 being built on. But if you came here specifically for O(1) array codegen on by default, that is still
 ahead of us rather than behind us.
 
@@ -252,11 +252,11 @@ nobody was actively maintaining it, and that an alternative existed which subsum
 Then the library got maintainers again. In the seven months since v11.0 was tagged it has taken over 100
 commits and a steady stream of releases, sitting at v2.29.5 as I write this, with work from Fredrik Bagge
 Carlson, Aayush Sabharwal, Sebastian Micluța-Câmpeanu and others. And it is not busywork: a large share
-of it is precisely the sort of thing the deprecation notice was complaining about the absence of — fixing
+of it is exactly the sort of thing the deprecation notice was complaining about the absence of: fixing
 rotational mechanics initialization and torque balance, repairing thermal and magnetic component tests,
-getting SISO initialization actually exercised through `ODEProblem`, tracking the v11 compatibility
-floors. Meanwhile the Dyad component libraries we were going to point people at have not seen a public
-push since mid-2025.
+getting SISO initialization exercised through `ODEProblem`, tracking the v11 compatibility floors.
+Meanwhile the Dyad component libraries we were going to point people at have not seen a public push
+since mid-2025.
 
 So the deprecation is called off. ModelingToolkitStandardLibrary.jl is supported and you should keep
 using it. I have left the original reasoning below, partly because it was a fair description of where the
@@ -300,8 +300,8 @@ Unlike the standard library above, this one went through as planned, and it got 
 outcomes we floated: `@mtkmodel` is deprecated out of ModelingToolkit v11, but it was spun out rather
 than killed. It now lives in SciCompDSL.jl, MIT licensed and currently at v1.0.1, developed in the
 ModelingToolkit monorepo under `lib/SciCompDSL`. It has had enough work to keep building systems on v11,
-so existing `@mtkmodel` code still runs — you add `SciCompDSL` to your project and `using SciCompDSL`
-rather than picking the macro up from `ModelingToolkit`. It won't get further maintenance from the core
+so existing `@mtkmodel` code still runs. You add `SciCompDSL` to your project and `using SciCompDSL`
+instead of picking the macro up from `ModelingToolkit`. It won't get further maintenance from the core
 ModelingToolkit developers, but it is open to contribution, and having it as its own package means
 somebody can take it over without needing commit rights to the compiler. The rest of this section is why
 we went that way.
@@ -328,7 +328,7 @@ and stable numerical simulations.
 That does not mean that we do not like DSLs on ModelingToolkit, oh not at all! Instead this is making `@mtkmodel`
 no longer a privileged DSL of the project. For example, SymBoltz.jl and Catalyst.jl are two great DSLs built on
 ModelingToolkit.jl, just as separate packages. Spinning `@mtkmodel` out into SciCompDSL.jl puts it on exactly
-that footing. The open call for new folks to come in and own it still stands — and, as the standard library
+that footing. The open call for new folks to come in and own it still stands, and as the standard library
 above shows, that call does sometimes get answered.
 
 We also must note that if someone really does need a fully developed DSL that is Modelica-like and compiles to
