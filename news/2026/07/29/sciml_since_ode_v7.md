@@ -7,14 +7,15 @@
 # What's New in SciML Since OrdinaryDiffEq v7
 
 OrdinaryDiffEq v7 and DifferentialEquations v8 shipped at the end of April, and last week we
-[wrote up what breaks and how to migrate](https://sciml.ai/news/2026/07/28/OrdinaryDiffEqv7/). That post
-is a list of costs. This is the other half of the ledger.
+[wrote up what breaks and how to migrate](https://sciml.ai/news/2026/07/28/OrdinaryDiffEqv7/). That was
+a long list of things you have to go fix, which is a fair description of a breaking release but not a
+very encouraging one. The reason we put everyone through it was to be able to build things that the old
+foundation could not support, so three months on, here is what got built.
 
-A breaking release is only justified if it clears the way for things that could not be built before, so
-three months on it seems fair to ask what actually got built. Everything below was run locally against
-the currently registered versions. Where something is on `master` but not tagged, or where two packages
-that both sound useful cannot currently be installed together, I've said so. Those are exactly the
-details that a summary written from commit messages gets wrong.
+Everything below was run locally against the currently registered versions. Where something is sitting on
+`master` but not tagged, or where two packages that both sound useful cannot currently be installed
+together, I've said so. Those are exactly the details a summary written from commit messages gets wrong,
+and you would find them out the hard way about ten minutes after reading this.
 
 ## Continuation methods, everywhere
 
