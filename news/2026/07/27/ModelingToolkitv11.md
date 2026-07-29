@@ -17,13 +17,14 @@ Major props to Aayush Sabharwal for leading much of the development on this rele
 With this, we have a lot to talk about and share. Some of this is a difficult discussion
 which we want to be transparent about, so please read through the entire post.
 
-A note on timing: ModelingToolkit v11.0.0 was tagged on December 11, 2025, and this post was
-drafted around that release. We held it while the community feedback threads on the
-[library split and licensing](https://discourse.julialang.org/t/modelingtoolkit-v11-library-split-and-licensing-community-feedback-requested/134396)
-ran their course. Rather than publish a stale announcement, we have updated it with what actually
-happened: at the time of writing, the series is at ModelingToolkit v11.36, ModelingToolkitBase v1.57,
-Symbolics v7.33, and SymbolicUtils v4.40. Where a plan described below changed in the intervening
-months, the text says so explicitly.
+One note on timing before we get into it. ModelingToolkit v11.0.0 was tagged on December 11, 2025, and
+most of this post was written around that release, but we held onto it while the community feedback
+threads on the [library split and
+licensing](https://discourse.julialang.org/t/modelingtoolkit-v11-library-split-and-licensing-community-feedback-requested/134396)
+ran their course. Publishing a seven month old announcement as though it were news seemed worse than
+publishing it with the benefit of hindsight, so the latter is what this is. The series is now at
+ModelingToolkit v11.36, ModelingToolkitBase v1.57, Symbolics v7.33 and SymbolicUtils v4.40, and wherever
+something described below turned out differently than we expected, the text says so.
 
 ## Licensing Changes
 
@@ -154,9 +155,9 @@ us to marry the [performance improvements of the advanced term representation](h
 with type-stability and all its associated performance benefits in SymbolicUtils.jl
 representation.
 
-The effect on time-to-first-X is not subtle. These are the first-call timings for the most common
-ModelingToolkit operations, measured before and after the change (full output in the
-[ModelingToolkit v11 release notes](https://github.com/SciML/ModelingToolkit.jl/blob/master/NEWS.md)):
+The effect on time-to-first-X is not subtle. Here are the first-call timings for the most common
+ModelingToolkit operations before and after the change, with the full `@time` output in the
+[v11 release notes](https://github.com/SciML/ModelingToolkit.jl/blob/master/NEWS.md):
 
 | Operation | Before | After | Speedup |
 |---|---|---|---|
@@ -165,13 +166,13 @@ ModelingToolkit operations, measured before and after the change (full output in
 | `TearingState` constructor | 0.374 s | 0.0021 s | ~180x |
 | `mtkcompile` (first call) | 1.773 s | 0.0186 s | ~95x |
 
-The "before" numbers are dominated by compilation (99%+ in each case, much of it *re*compilation).
-That is the tell: the old dynamic representation forced Julia to recompile the compiler pipeline in
-every fresh session, so none of it could be cached by precompilation. With the type-stable
-representation, that work moves into the package's precompile step and the first call is essentially
-just runtime. Your mileage will vary with the specific system, whether index reduction is required,
-whether array variables are involved, and what else is loaded in the session, but the shape of the
-improvement is consistent.
+What makes those "before" numbers what they are is that they're 99%+ compilation, and a good chunk of
+that is *re*compilation. The old dynamic representation meant Julia had to recompile the compiler
+pipeline itself in every fresh session, so essentially none of it could be cached by precompilation no
+matter how many `@compile_workload` blocks we threw at it. Now that work happens once, in the package's
+precompile step, and the first call is basically just runtime. The exact numbers will of course depend on
+the system, whether index reduction is needed, whether there are array variables involved, and what else
+you have loaded, but the shape of it holds up.
 
 Because the core aspects were now type-stable, changes were made to the parts on top of the representation,
 in particular the functions of Symbolics.jl and the compiler pipeline of ModelingToolkit.jl, to ensure that
@@ -186,9 +187,9 @@ There are still some functions being worked on to make them fully type-stable, f
 function still has some dynamic typing in it that increases the time-to-first-ODE-solve a bit. However, we believe
 that all of the required breaking changes have been made, and thus we wanted to get this version out there,
 and future minor version releases in the v11 time frame will continue to improve type-stability, performance,
-and time-to-first-X based on this new foundation. That has held: the 36 minor releases since v11.0 have been
-non-breaking, and a large fraction of them are exactly this kind of incremental type-stability and
-allocation work on top of the new foundation.
+and time-to-first-X based on this new foundation. Seven months later that has held up: there have been 36
+minor releases since v11.0, all of them non-breaking, and a good fraction of them are this sort of
+incremental type-stability and allocation work.
 
 Major props to Aayush Sabharwal for leading this effort.
 
@@ -220,15 +221,16 @@ for that. When completed, the generated code for array expressions will be O(1) 
 This will solve a long-standing issue in the ModelingToolkit compiler, and approximately 60% of the work is now
 completed because the Symbolics code generation was one major aspect.
 
-**Status update.** This is the part of the v11 plan that has moved slowest, so we want to be honest about
-where it stands rather than let the original text imply more than is true. As of ModelingToolkit v11.36,
-SymbolicCompilerPasses.jl is **not** enabled by default from the ModelingToolkit compiler — it remains
-opt-in. The Reactant.jl integration is likewise still pending on the upstream issue linked above, which
-is [still open](https://github.com/EnzymeAD/Reactant.jl/issues/1864). What *has* landed is steady work on the
-ModelingToolkit side of array handling: preserving arrays through flattened variable lookup, propagating
-array parameter assignments into SCC subsystems, and removing scalarization from observed-function
-codegen. So the foundation is real and being built on, but if you came here for O(1) array codegen turned
-on by default, that is still ahead of us rather than behind us.
+Of everything described in this post, this is the piece that has moved slowest since the release, and it
+would be misleading to leave the paragraph above sitting there without an update. As of ModelingToolkit
+v11.36, SymbolicCompilerPasses.jl is still not turned on by default from the ModelingToolkit compiler;
+it remains opt-in. The Reactant.jl integration is likewise still waiting on the upstream issue linked
+above, which is [open](https://github.com/EnzymeAD/Reactant.jl/issues/1864) at the time of writing. What
+has landed in the meantime is a steady stream of array handling work on the ModelingToolkit side:
+preserving arrays through flattened variable lookup, propagating array parameter assignments into SCC
+subsystems, dropping scalarization out of observed-function codegen. So the foundation is real and is
+being built on. But if you came here specifically for O(1) array codegen on by default, that is still
+ahead of us rather than behind us.
 
 We note for avid users that MethodOfLines.jl will need a substantial change in order to use array expressions
 in order for our PDE discretizers to benefit from these improvements, and NeuralPDE.jl's codegen will need a
@@ -238,28 +240,29 @@ new contributors to have an outsized impact.
 
 ## The ModelingToolkitStandardLibrary.jl: A Deprecation That We Called Off
 
-This section is the one that changed the most between drafting and publishing, and we think the honest
-thing to do is show both the original reasoning and what actually happened.
+This section changed more than any other between when it was drafted and when it was published. I could
+have silently rewritten it, but the difference between what we were going to say and what happened is
+instructive enough that it seems better to show both.
 
-**What we originally planned to announce:** that
-[ModelingToolkitStandardLibrary.jl](https://github.com/SciML/ModelingToolkitStandardLibrary.jl) would soon be deprecated,
-in favor of the Dyad standard libraries. The reasoning was that the library had fallen behind, nobody was
-actively maintaining it, and an alternative existed that subsumed its functionality.
+The plan was to announce that
+[ModelingToolkitStandardLibrary.jl](https://github.com/SciML/ModelingToolkitStandardLibrary.jl) would soon
+be deprecated in favor of the Dyad standard libraries, on the grounds that it had fallen behind, that
+nobody was actively maintaining it, and that an alternative existed which subsumed its functionality.
 
-**What actually happened:** the library got maintainers again. In the seven months since ModelingToolkit v11.0
-was tagged, ModelingToolkitStandardLibrary.jl has taken over 100 commits and a steady stream of releases,
-currently sitting at v2.29.5, with contributions from Fredrik Bagge Carlson, Aayush Sabharwal, Sebastian
-Micluța-Câmpeanu, and others. A large share of that work is exactly the kind of thing the deprecation
-notice was complaining about being absent: fixing rotational mechanics initialization and torque balance,
-repairing thermal and magnetic component tests, getting SISO initialization exercised through `ODEProblem`,
-and tracking the ModelingToolkit v11 compatibility floors. Meanwhile the Dyad component libraries we pointed
-at as the replacement have not seen a public push since mid-2025.
+Then the library got maintainers again. In the seven months since v11.0 was tagged it has taken over 100
+commits and a steady stream of releases, sitting at v2.29.5 as I write this, with work from Fredrik Bagge
+Carlson, Aayush Sabharwal, Sebastian Micluța-Câmpeanu and others. And it is not busywork: a large share
+of it is the sort of thing the deprecation notice was complaining about the absence of: fixing
+rotational mechanics initialization and torque balance, repairing thermal and magnetic component tests,
+getting SISO initialization exercised through `ODEProblem`, tracking the v11 compatibility floors.
+Meanwhile the Dyad component libraries we were going to point people at have not seen a public push
+since mid-2025.
 
-So: **the deprecation is called off.** ModelingToolkitStandardLibrary.jl is supported, and you should keep
-using it. We are leaving the original reasoning below because it is a fair description of the state the
-library was in at the end of 2025, and because it is a good illustration of how quickly "this is unmaintained"
-can be fixed by a couple of people deciding to maintain it. If you use this library, the maintainers would
-still welcome the help.
+So the deprecation is called off. ModelingToolkitStandardLibrary.jl is supported and you should keep
+using it. I have left the original reasoning below, partly because it was a fair description of where the
+library sat at the end of 2025, and partly because it is a nice demonstration of how fast "this is
+unmaintained" stops being true once two or three people decide otherwise. If you use this library, the
+maintainers would still be happy to have the help.
 
 ### The original reasoning (for the record)
 
@@ -285,23 +288,23 @@ libraries serve as a fully open source alternative to everything in the Modeling
 have lots of testing in the real world, and many thoughtful design decisions from some
 of the industry's best.
 
-That last paragraph is still true, and the Dyad component libraries remain an excellent BSD-3 option worth
-evaluating — in particular if you want components that trace back to the Modelica Standard Library's
-semantics. What is no longer true is the conclusion we drew from it. You now have two maintained choices
-rather than one deprecation, which is a better place to be. We do still owe better documentation and
-discoverability for purely ModelingToolkit / non-Dyad users of the Dyad component libraries.
+All of that is still accurate, and the Dyad component libraries are well worth evaluating on their own
+merits, particularly if you want components whose semantics trace back to the Modelica Standard Library.
+It was only the conclusion we drew that turned out to be wrong. Having two maintained options beats
+having one of them deprecated. We do still owe better documentation and discoverability for people who
+want to use the Dyad component libraries from plain ModelingToolkit without Dyad itself.
 
 ## Deprecation of the `@mtkmodel` Macro and Focusing the Development Effort of ModelingToolkit.jl as a Compiler
 
-The `@mtkmodel` macro is deprecated in ModelingToolkit v11, and unlike the standard library above, this one
-went through as planned — with the better of the two outcomes we described. It was not killed; it was
-spun out. `@mtkmodel` now lives in **SciCompDSL.jl** (MIT licensed, currently v1.0.1), which is developed in
-the ModelingToolkit monorepo under `lib/SciCompDSL`. It has been updated enough to build systems on v11, so
-existing `@mtkmodel` code keeps working — you add `SciCompDSL` to your project and `using SciCompDSL` instead
-of getting the macro from `ModelingToolkit`. It will not receive further maintenance from the core
-ModelingToolkit developers, but it is open to community contribution, and the spin-out means a new maintainer
-can take it over without needing commit rights to the compiler. The rest of this section is the reasoning
-behind that decision.
+Unlike the standard library above, this one went through as planned, and it got the better of the two
+outcomes we floated: `@mtkmodel` is deprecated out of ModelingToolkit v11, but it was spun out rather
+than killed. It now lives in SciCompDSL.jl, MIT licensed and currently at v1.0.1, developed in the
+ModelingToolkit monorepo under `lib/SciCompDSL`. It has had enough work to keep building systems on v11,
+so existing `@mtkmodel` code still runs. You add `SciCompDSL` to your project and `using SciCompDSL`
+instead of picking the macro up from `ModelingToolkit`. It won't get further maintenance from the core
+ModelingToolkit developers, but it is open to contribution, and having it as its own package means
+somebody can take it over without needing commit rights to the compiler. The rest of this section is why
+we went that way.
 
 The `@mtkmodel` macro was designed as a Modelica-like syntax for which one can use ModelingToolkit.jl. While
 some effort was put into it at the early stages, it ultimately has lacked much development for around the last
@@ -324,8 +327,8 @@ and stable numerical simulations.
 
 That does not mean that we do not like DSLs on ModelingToolkit, oh not at all! Instead this is making `@mtkmodel`
 no longer a privileged DSL of the project. For example, SymBoltz.jl and Catalyst.jl are two great DSLs built on
-ModelingToolkit.jl, just as separate packages. Spinning `@mtkmodel` out into SciCompDSL.jl puts it on exactly
-that footing. The open call for new folks to come in and own it still stands — and, as the standard library
+ModelingToolkit.jl, just as separate packages. Spinning `@mtkmodel` out into SciCompDSL.jl puts it on
+that same footing. The open call for new folks to come in and own it still stands, and as the standard library
 above shows, that call does sometimes get answered.
 
 We also must note that if someone really does need a fully developed DSL that is Modelica-like and compiles to
