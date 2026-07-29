@@ -6,35 +6,34 @@
 
 # What's New in SciML Since OrdinaryDiffEq v7
 
-OrdinaryDiffEq v7 and DifferentialEquations v8 shipped at the end of April 2026, and we
-[wrote up what breaks and how to migrate](https://sciml.ai/news/2026/07/28/OrdinaryDiffEqv7/). That post is
-about paying a cost. This one is about what the cost bought.
+OrdinaryDiffEq v7 and DifferentialEquations v8 shipped at the end of April, and last week we
+[wrote up what breaks and how to migrate](https://sciml.ai/news/2026/07/28/OrdinaryDiffEqv7/). That post
+is a list of costs. This is the other half of the ledger.
 
-A breaking release is only worth it if it clears the way for things you could not do before. Three months
-on, here is what has actually been built on the new foundation. Everything below was run locally against
-the currently registered versions; where a feature is on `master` but not yet released, or not yet
-co-installable with something else, this post says so rather than letting you find out the hard way.
+A breaking release is only justified if it clears the way for things that could not be built before, so
+three months on it seems fair to ask what actually got built. Everything below was run locally against
+the currently registered versions. Where something is on `master` but not tagged, or where two packages
+that both sound useful cannot currently be installed together, I've said so — those are exactly the
+details that a summary written from commit messages gets wrong.
 
-## Homotopy continuation is now everywhere in the stack
+## Continuation methods, everywhere
 
-If there is one theme to the last three months, this is it. Continuation methods went from "not really a
-thing in SciML" to a first-class problem type with a solver family, and then propagated outward into the
-ODE solvers and into ModelingToolkit's initialization. This is the change most likely to fix a problem you
-currently have.
+If the last three months had a theme, this is it. Homotopy continuation went from something SciML didn't
+really do to a first-class problem type with a solver family behind it, and then started showing up
+underneath things you already call.
 
-The foundation is a new problem type in SciMLBase, `HomotopyProblem`, plus `HomotopyNonlinearFunction`.
-Rather than asking a Newton solver to jump straight to the answer from your initial guess, you describe a
-*path*: a family of problems `H(u, p, λ)` parameterized by `λ`, where `λ = 0` is something you can solve
-trivially and `λ = 1` is the problem you care about. The solver then tracks the solution along the path.
+The foundation is `HomotopyProblem` in SciMLBase, along with `HomotopyNonlinearFunction`. Instead of
+asking Newton to jump straight to the answer from whatever guess you had lying around, you describe a
+path: a family `H(u, p, λ)` where `λ = 0` is something trivially solvable and `λ = 1` is the problem you
+care about, and the solver tracks the solution along it. Newton's method is only locally convergent, and
+continuation is the standard answer to that — it's how you get global convergence from a bad guess, and
+more importantly it's how you handle a solution branch that folds back on itself, which parameter
+marching simply cannot do no matter how small you make the steps.
 
-Why this matters: Newton's method is only locally convergent. Continuation is how you get a *globally*
-convergent method when you have a bad initial guess, and it is how you handle problems where the solution
-branch folds back on itself — which plain parameter-marching fundamentally cannot do.
-
-Here is the fold case, which is the one worth seeing. Take `u³ - 3u = -3 + 6λ` on `λ ∈ [0, 1]`. It has
-turning points at `u = ±1`, i.e. `λ = 1/6` and `λ = 5/6`. To get from the `λ = 0` root on the lower sheet
-to the `λ = 1` root on the upper sheet along the *connected* branch, `λ` must rise to 5/6, **reverse**
-down to 1/6, and then climb to 1:
+The fold case is the one worth actually looking at. Take `u³ - 3u = -3 + 6λ` over `λ ∈ [0, 1]`. There are
+turning points at `u = ±1`, which is `λ = 1/6` and `λ = 5/6`. Getting from the `λ = 0` root on the lower
+sheet to the `λ = 1` root on the upper sheet along the connected branch means `λ` has to climb to 5/6,
+reverse all the way back down to 1/6, and only then go up to 1:
 
 ```julia
 using NonlinearSolve, SciMLBase
@@ -51,148 +50,110 @@ u at λ=1        = 2.103803
 target residual = 1.78e-15
 ```
 
-`ArcLengthContinuation` implements pseudo-arclength continuation: it parameterizes by arclength along the
-solution curve instead of by `λ`, so reversing direction in `λ` is not a special case — it is just
-continuing to walk forward along the curve. Instrumenting the residual evaluations confirms the solver
-climbs past the first turning point and then reverses, exactly as the geometry requires. A
-natural-parameter method that only ever increases `λ` cannot do this; it walks off the end of the lower
-sheet at the fold and fails.
+`ArcLengthContinuation` parameterizes by arclength along the solution curve rather than by `λ`, so
+reversing direction isn't a special case that needs handling, it's just continuing to walk forward along
+the curve. Instrumenting the residual evaluations confirms it climbs past the first turning point and
+then heads back down, which is what the geometry demands. A natural-parameter method that only ever
+increases `λ` walks off the end of the lower sheet at the fold and fails.
 
-The continuation surface available today:
+Currently released, alongside `ArcLengthContinuation` (which also takes `predictor = :tangent` for a true
+tangent predictor): `HomotopyPolyAlgorithm`, a staged polyalgorithm that tries the cheap strategies before
+the expensive ones; `SimpleHomotopySweep`, an allocation-free version for StaticArrays and small systems
+in hot loops; and `PseudoTransient`, which picked up mass-matrix damping. Two more are on `master` and
+worth watching but not yet tagged — `TaylorHomotopyContinuationJL`, which polynomializes non-polynomial
+systems so the polynomial homotopy machinery applies to them, and `FastShortcutHomotopyPolyalg`, the
+autodiff-aware default.
 
-| Solver | What it is for |
-|---|---|
-| `ArcLengthContinuation` | Pseudo-arclength continuation; handles folds and turning points. `predictor = :tangent` gives a true tangent predictor. |
-| `HomotopyPolyAlgorithm` | Staged polyalgorithm for `HomotopyProblem` — tries cheap strategies before expensive ones |
-| `SimpleHomotopySweep` | Allocation-free continuation for `StaticArrays`, for small systems in hot loops |
-| `PseudoTransient` | Pseudo-transient continuation, now with mass-matrix damping |
+The part that matters for people who don't want to think about any of this is that continuation is being
+wired in as an implementation strategy underneath existing APIs. OrdinaryDiffEq now has
+`HomotopyNonlinearSolveAlg`, which solves the implicit stage equations of a stiff method by step-size
+homotopy continuation — when a Newton iteration inside an implicit solver fails, the traditional response
+is to cut `dt` and try again, and this is a more principled version of the same instinct. It ships in
+`OrdinaryDiffEqNonlinearSolve` v2.4.0 rather than the umbrella, so you want
+`using OrdinaryDiffEqNonlinearSolve: HomotopyNonlinearSolveAlg`. Meanwhile ModelingToolkit now routes DAE
+and ODE initialization through the continuation solver, which is a natural fit: consistent initialization
+of a DAE is precisely the problem of solving a hard nonlinear system from a guess that might be poor, and
+initialization failure has been one of the most common ways a large acausal model refuses to run at all.
 
-Two more sit on `master` and are worth watching but are not in a registered release as of writing:
-`TaylorHomotopyContinuationJL`, a polynomialization front-end that lets you apply polynomial homotopy
-machinery to *non*-polynomial systems, and `FastShortcutHomotopyPolyalg`, the named autodiff-aware default.
+So if you've ever stared at an "initialization failed" message on a big model, or watched a stiff solve
+die on Newton convergence, this is the work aimed squarely at you.
 
-### Where it shows up without you asking
+## Multirate integrators
 
-The part that matters for ordinary users is that continuation is being wired in as an *implementation*
-strategy underneath things you already call:
+`OrdinaryDiffEqMultirate` is a new sublibrary of multirate infinitesimal methods for split problems
+`du/dt = f₁(u,t) + f₂(u,t)` where `f₁` is fast and `f₂` is slow. The slow term is frozen across a macro
+step while the fast term gets `m` micro-steps, so the expensive slow right-hand side is evaluated once per
+macro step rather than once per micro-step.
 
-- **OrdinaryDiffEq** gained `HomotopyNonlinearSolveAlg`, which solves the implicit stage equations of a
-  stiff method by step-size homotopy continuation. When a Newton iteration inside an implicit solver
-  fails, the classic remedy is to cut `dt` and retry; continuation is a more principled version of the
-  same idea. It ships in `OrdinaryDiffEqNonlinearSolve` (v2.4.0), not the `OrdinaryDiffEq` umbrella, so
-  reach it with `using OrdinaryDiffEqNonlinearSolve: HomotopyNonlinearSolveAlg`.
-- **ModelingToolkit** now routes DAE and ODE initialization through the homotopy continuation solver.
-  Consistent initialization of a DAE is exactly the "solve a hard nonlinear system from a guess that may
-  be poor" problem that continuation is built for, and initialization failures have historically been one
-  of the most common ways a large acausal model refuses to run.
-
-If you have ever hit "initialization failed" on a big model, or watched a stiff solve die with a Newton
-convergence failure, this is the work aimed at you.
-
-## A multirate integrator family
-
-`OrdinaryDiffEqMultirate` is a new sublibrary implementing multirate infinitesimal methods for split
-problems `du/dt = f₁(u,t) + f₂(u,t)`, where `f₁` is fast and `f₂` is slow. The slow term is frozen across
-a macro step while the fast term is integrated with `m` micro-steps, so you evaluate the expensive slow
-right-hand side once per macro step instead of once per micro-step.
-
-Available today in `OrdinaryDiffEqMultirate` v2.6.0:
-
-| Method | Order | Kind |
-|---|---|---|
-| `MRIGARKERK22a`, `MRIGARKERK22b` | 2 | Explicit MRI-GARK (Sandu 2019) |
-| `MRIGARKERK33a` | 3 | Explicit MRI-GARK |
-| `MRIGARKERK45a` | 4 | Explicit MRI-GARK |
-| `MRIGARKIRK21a` | 2 | Solve-decoupled implicit MRI-GARK |
-| `MRIGARKESDIRK34a` | 3 | Solve-decoupled implicit MRI-GARK |
-| `MRAB` | — | Multirate Adams–Bashforth (k-step) |
-| `MREEF` | adaptive | Multirate Richardson extrapolation, Euler base |
-| `MIS` | — | Multirate infinitesimal step (Wensch–Knoth–Galant) |
-
-Usage is the standard `SplitODEProblem`, with `m` (the micro-step count) as a required keyword:
+What's in v2.6.0: `MRIGARKERK22a` and `MRIGARKERK22b` (order 2), `MRIGARKERK33a` (order 3) and
+`MRIGARKERK45a` (order 4) from the Sandu 2019 explicit MRI-GARK family; `MRIGARKIRK21a` and
+`MRIGARKESDIRK34a` for the solve-decoupled implicit versions; plus `MRAB` (multirate Adams–Bashforth),
+`MREEF` (Richardson extrapolation on an Euler base, adaptive) and `MIS` (Wensch–Knoth–Galant). It's a
+standard `SplitODEProblem`, with `m` as a required keyword:
 
 ```julia
 using OrdinaryDiffEqMultirate, SciMLBase
 
-f_fast!(du, u, p, t) = @. du = -50.0 * u     # fast
-f_slow!(du, u, p, t) = @. du = -u            # slow, and expensive in real problems
+f_fast!(du, u, p, t) = @. du = -50.0 * u
+f_slow!(du, u, p, t) = @. du = -u
 
 prob = SplitODEProblem(f_fast!, f_slow!, [1.0, 2.0, 3.0], (0.0, 1.0))
 sol  = solve(prob, MRIGARKERK33a(m = 10); dt = 0.01, adaptive = false)
 ```
 
-Verifying the order claim on that problem by halving `dt`:
+Halving `dt` on that problem confirms the order claim, giving observed orders of 3.31, 3.15 and 3.08 as
+the step size comes down, converging on 3 as advertised. Counting right-hand side calls at `dt = 0.01`
+with `m = 10` shows the structural property these methods exist for — `MRAB` does 1001 fast evaluations
+against 101 slow ones, `MRIGARKERK33a` does 9001 against 301, and `MRIGARKERK45a` does 20001 against 501.
+Somewhere between twenty and forty times fewer evaluations of the expensive half.
 
-```
-dt 0.02  -> 0.01     observed order = 3.31
-dt 0.01  -> 0.005    observed order = 3.15
-dt 0.005 -> 0.0025   observed order = 3.08
-```
-
-Converging at order 3, as advertised. And the structural property these methods exist for, measured by
-counting right-hand side calls at `dt = 0.01`, `m = 10`:
-
-| Method | fast RHS calls | slow RHS calls |
-|---|---|---|
-| `MRAB(m=10)` | 1001 | 101 |
-| `MRIGARKERK22a(m=10)` | 4001 | 201 |
-| `MRIGARKERK33a(m=10)` | 9001 | 301 |
-| `MRIGARKERK45a(m=10)` | 20001 | 501 |
-
-Roughly 20-40x fewer slow-term evaluations than fast-term evaluations.
-
-**An honest caveat, because it decides whether this helps you.** That call-count ratio is a structural
-property, not a speedup. Whether it becomes wall-clock time depends on two things being true: your slow
-term must be genuinely expensive relative to the fast term, *and* your macro step size must be limited by
-the slow dynamics rather than the fast ones. I tried to construct a synthetic benchmark showing a clean
-win over `Tsit5` on the combined right-hand side and could not — on a fast oscillation riding a slow
-decay, the macro step is still constrained by the need to resolve the oscillation, and single-rate `Tsit5`
-was competitive per unit of accuracy. These methods are aimed at problems like atmospheric dynamics, where
-the fast acoustic modes are cheap and local while the slow physics is expensive and global. If that is not
-your problem shape, measure before switching.
+Now the caveat, because it decides whether any of this helps you. That ratio is a structural property of
+the method, not a speedup. It turns into wall-clock time only if your slow term is genuinely expensive
+relative to the fast one *and* your macro step is limited by the slow dynamics rather than the fast ones.
+I tried to build a synthetic benchmark showing a clean win over `Tsit5` on the combined right-hand side
+and could not manage it: on a fast oscillation riding a slow decay the macro step stays pinned by the
+need to resolve the oscillation, and single-rate `Tsit5` was competitive per unit of accuracy. These
+methods are aimed at things like atmospheric dynamics, where the fast acoustic modes are cheap and local
+and the slow physics is expensive and global. If your problem doesn't have that shape, benchmark before
+switching.
 
 ## New solvers
 
-Verified present in the current registered sublibraries:
+`Rodas3d` in `OrdinaryDiffEqRosenbrock` v2.6.0 is an L-stable, stiffly accurate Rosenbrock method built
+for DAEs that are integrating toward a steady state. On the Robertson problem out to `t = 1e5` it agrees
+with `Rodas5P` to six significant figures and satisfies the algebraic constraint to `1.1e-16`, taking
+1109 steps against Rodas5P's 193, which is what its lower order implies. If you integrate DAEs to steady
+state and the higher-order Rodas methods have given you trouble there, try it.
 
-- **`Rodas3d`** (`OrdinaryDiffEqRosenbrock` v2.6.0) — an L-stable, stiffly accurate Rosenbrock method
-  aimed specifically at DAE integration that approaches a steady state. On the Robertson DAE to `t = 1e5`
-  it lands on the same answer as `Rodas5P` to six significant figures and satisfies the algebraic
-  constraint to `1.1e-16`, taking more steps as its lower order implies. If you integrate DAEs to steady
-  state and have had trouble with the higher-order Rodas methods there, this is the one to try.
-- **`Rodas4PW`** (`OrdinaryDiffEqRosenbrock` v2.6.0) — a W-method variant of `Rodas4P`.
-- **`ARS222`, `ARS232`, `ARS343`, `ARS443`, `BHR553`** (`OrdinaryDiffEqSDIRK` v2.8.1) — IMEX Runge–Kutta
-  schemes (Ascher–Ruuth–Spiteri, and Boscarino–Russo's BHR(5,5,3)). Useful for convection–diffusion-shaped
-  problems where you want to treat one operator implicitly and the other explicitly.
-- **`ESDIRK325L2SA`** — the Kennedy–Carpenter (2019) ESDIRK3(2)5L[2]SA method, joining the existing
-  `ESDIRK436L2SA2` / `ESDIRK437L2SA` / `ESDIRK547L2SA2` / `ESDIRK54I8L2SA` / `ESDIRK659L2SA` family, plus a
-  generic stage-predictor menu for ESDIRK methods.
+Also newly available: `Rodas4PW`, a W-method variant of `Rodas4P`, in the same package. In
+`OrdinaryDiffEqSDIRK` v2.8.1 there's a batch of IMEX Runge–Kutta schemes — `ARS222`, `ARS232`, `ARS343`
+and `ARS443` from Ascher–Ruuth–Spiteri, plus Boscarino–Russo's `BHR553` — which are the right shape for
+convection–diffusion problems where you want one operator implicit and the other explicit. And
+`ESDIRK325L2SA`, the Kennedy–Carpenter 2019 method, joins the existing `ESDIRK436L2SA2`,
+`ESDIRK437L2SA`, `ESDIRK547L2SA2`, `ESDIRK54I8L2SA` and `ESDIRK659L2SA` family, which also picked up a
+generic stage-predictor menu.
 
-On `master` but not yet in a registered release: `MSRK10` (Stepanov order-10 explicit RK) and the
-Runge–Kutta–Gegenbauer stabilized methods.
+On `master` but not yet tagged: `MSRK10`, Stepanov's order-10 explicit RK, and the Runge–Kutta–Gegenbauer
+stabilized methods.
 
-## LinearSolve v5: a pure-Julia sparse LU, and eigenvalue problems
+## LinearSolve v5
 
-`SupernodalLUFactorization` is a pure-Julia supernodal LU (a Schenk–Gärtner-style algorithm via
-PurePardiso.jl). The interesting property is not raw speed — it is that it is *Julia*, with no SuiteSparse
-C dependency in the path, which matters for static compilation, trimming, and unusual element types.
+`SupernodalLUFactorization` is a pure-Julia supernodal LU, a Schenk–Gärtner-style algorithm via
+PurePardiso.jl. The interesting thing about it isn't raw speed, it's that there's no SuiteSparse C
+dependency anywhere in the path, which is what you want for static compilation, trimming, and element
+types that the C libraries have never heard of.
 
-Measured on a 2D 5-point Laplacian, median of 3 runs after warmup:
+On a 2D five-point Laplacian, median of three runs after warmup, it's competitive — at n = 4,900 it takes
+0.019s against UMFPACK's 0.174s and KLU's 0.012s, and by n = 10,000 the three have converged to roughly
+0.047s, 0.049s and 0.039s respectively, with relative residuals around 1e-13 for all of them. That's why
+the structured-sparse default LU now routes to it. On an unstructured matrix with random fill I measured
+it slower than UMFPACK (1.12s against 0.52s at n = 4,000), which is roughly what you'd expect from a
+supernodal algorithm handed a matrix with no supernodes to find. The default polyalgorithm exists so you
+don't have to make this call yourself.
 
-| n | `LUFactorization` (UMFPACK) | `SupernodalLUFactorization` | `KLUFactorization` |
-|---|---|---|---|
-| 4,900 | 0.174 s | 0.019 s | 0.012 s |
-| 10,000 | 0.049 s | 0.047 s | 0.039 s |
-
-Relative residuals were ~1e-13 for all three. It is competitive on structured sparse problems — which is
-why the structured-sparse default LU now routes to it — though on an unstructured matrix with random
-fill I measured it slower than UMFPACK (1.12 s vs 0.52 s at n=4000). As always, the default polyalgorithm
-exists so you do not have to make this call yourself.
-
-The other notable addition is a genuinely new problem type: **`EigenvalueProblem`**, with
-`EigenvalueSolution` and `EigenvalueTarget`, backed by dense, Arpack, ArnoldiMethod, KrylovKit, and
-Jacobi–Davidson solvers. Eigenvalue computations now get the same swappable-algorithm treatment as linear
-and nonlinear solves:
+The other addition is a genuinely new problem type. `EigenvalueProblem`, with `EigenvalueSolution` and
+`EigenvalueTarget`, backed by dense, Arpack, ArnoldiMethod, KrylovKit and Jacobi–Davidson solvers, brings
+eigenvalue computations into the same swappable-algorithm world as linear and nonlinear solves:
 
 ```julia
 using LinearSolve, SciMLBase
@@ -204,76 +165,71 @@ sol.alg      # DenseEigen()
 sol.retcode  # Success
 ```
 
-Also in v5: lightweight solutions (`solve!` no longer populates `LinearSolution.cache`, which removes a
-large retention footprint), `warm_start` on `KrylovJL_GMRES`/`FGMRES`, BLAS LU workspace reuse across
-refactorizations, and automatic handling of nonstructural zeros.
+Also in v5: solutions got lighter, since `solve!` no longer populates `LinearSolution.cache` and so no
+longer retains a large chunk of memory you probably didn't want; `KrylovJL_GMRES` and `FGMRES` gained
+`warm_start`; BLAS LU workspaces are reused across refactorizations; and nonstructural zeros are handled
+automatically.
 
-**The caveat you need before you `Pkg.add`:** LinearSolve v5 is **not currently co-installable with
-OrdinaryDiffEq v7.1.3**. The ODE sublibraries (`OrdinaryDiffEqDefault`, `OrdinaryDiffEqDifferentiation`,
-`OrdinaryDiffEqNonlinearSolve`, `OrdinaryDiffEqRosenbrock`) cap LinearSolve at v4, so adding both gets you
-LinearSolve v4.3.0 and no `SupernodalLUFactorization`. If you want LinearSolve v5 features today, use it
-standalone; the compat bump is in progress, and the OrdinaryDiffEq change that makes Newton–Krylov
-integrators default to a Hegedüs warm start is already on `master` waiting on LinearSolve 5.1.
+One thing to know before you reach for any of it: LinearSolve v5 cannot currently be installed alongside
+OrdinaryDiffEq v7.1.3. The ODE sublibraries — `OrdinaryDiffEqDefault`, `OrdinaryDiffEqDifferentiation`,
+`OrdinaryDiffEqNonlinearSolve`, `OrdinaryDiffEqRosenbrock` — cap LinearSolve at v4, so asking for both
+quietly resolves you to v4.3.0 with no `SupernodalLUFactorization` in sight. Use it standalone for now.
+The compat bump is in progress, and the OrdinaryDiffEq change that makes Newton–Krylov integrators
+default to a Hegedüs warm start is already sitting on `master` waiting on LinearSolve 5.1.
 
-## Sensitivity analysis: implicit DAE adjoints
+## Adjoints through fully implicit DAEs
 
-SciMLSensitivity gained adjoint sensitivity support for **fully implicit `DAEProblem`s**, covering both
-index-1 and Hessenberg index-2 systems. Getting gradients through a fully implicit DAE has been a
-long-standing gap — you could differentiate mass-matrix ODEs, but genuinely implicit `f(du, u, p, t) = 0`
-formulations were not covered. If you are calibrating or optimizing a model expressed that way, this is
-the unlock.
+SciMLSensitivity gained adjoint sensitivity support for fully implicit `DAEProblem`s, covering index-1
+and Hessenberg index-2 systems. This closes a gap that had been open a long time: you could already
+differentiate mass-matrix ODEs, but genuinely implicit `f(du, u, p, t) = 0` formulations weren't covered,
+which meant anyone whose model was naturally written that way had to reformulate it before they could
+calibrate or optimize anything. Alongside it there's `SundialsAdjoint`, which drives the CVODES C adjoint
+interface directly rather than reimplementing it, and an `EnzymeVJP` dispatch for SDE adjoints with
+non-diagonal noise.
 
-Alongside it: **`SundialsAdjoint`**, which uses the CVODES C adjoint interface directly rather than
-reimplementing it, and an `EnzymeVJP` dispatch for non-diagonal-noise SDE adjoints.
+## Compile time, again
 
-## Compile time: `AutoDePSpecialize`
+`AutoDePSpecialize` is a new specialization level, landed across SciMLBase, OrdinaryDiffEq and
+NonlinearSolve. Where `AutoSpecialize` — the v7 default — cuts recompilation across right-hand side
+function types, this one goes after the parameters, de-specializing non-`isbits` `p` behind an
+`OpaqueRef` so the solver stops recompiling for every distinct parameter container type. It's aimed at
+large struct-of-arrays parameter objects and ModelingToolkit-generated containers, where you were
+otherwise paying a fresh compilation for each one. Opt-in.
 
-A new specialization level, `AutoDePSpecialize`, landed across SciMLBase, OrdinaryDiffEq, and
-NonlinearSolve. Where `AutoSpecialize` (the v7 default) reduces recompilation across right-hand side
-function types, `AutoDePSpecialize` goes after the *parameters*: it de-specializes non-`isbits` `p` via an
-`OpaqueRef`, so the solver does not recompile for every distinct parameter container type.
+## The unglamorous half
 
-This is aimed at the case where you have a large struct-of-arrays parameter object, or a
-ModelingToolkit-generated parameter container, and you were paying a fresh compilation for it. It is
-opt-in.
+A good fraction of the merged work in this window adds no API at all, which makes it easy to leave out of
+a post like this and is also where most of your day-to-day solve time actually comes from.
 
-## The unglamorous half: allocations and step counts
+ROCK2, ROCK4 and RKC now rotate their stage buffers instead of copying them in the in-place loops, and
+recompute the spectral radius every 25 steps by default rather than far more often — these are stabilized
+explicit methods, so they're used precisely on the large problems where both of those were real costs.
+Rosenbrock stage accumulation loops were fused into single-sweep SIMD kernels. The EPIRK, Exp4 and
+EXPRB53s3 steppers had their per-step allocations removed and their residual column-slice updates turned
+into views. On the implicit side, redundant sparse-Jacobian structure rebuilds are skipped in `calc_J!`,
+W gets refactorized on the linear path when `γdt` drifts, and the SDIRK error estimate is smoothed by
+reusing the inner W factorization. `NonlinearSolveAlg` lost an inner termination check that could never
+fire, started surfacing inner failures instead of swallowing them, and now lets the integrator decide
+convergence rather than the inner solver.
 
-A large fraction of the merged work in this window is performance grinding that produces no new API. It is
-worth listing because it is where day-to-day solve time actually comes from:
+Structurally, `GlobalDiffEq.jl` moved into the OrdinaryDiffEq monorepo as `lib/GlobalDiffEq`, following
+`DiffEqBase`, for the same reason as before: packages that have to version in lockstep should release in
+lockstep.
 
-- **ROCK2 / ROCK4 / RKC**: stage buffers are now rotated instead of copied in the in-place loops, and the
-  spectral radius is recomputed every 25 steps by default rather than far more often. Stabilized explicit
-  methods are used precisely on large problems where both of those were real costs.
-- **Rosenbrock**: stage accumulation loops fused into single-sweep SIMD kernels.
-- **ExponentialRK**: per-step allocations removed from the EPIRK / Exp4 / EXPRB53s3 steppers, and residual
-  column-slice updates changed to views.
-- **Implicit solvers**: redundant sparse-Jacobian structure rebuilds skipped in `calc_J!`, W refactorized
-  on the linear path when `γdt` drifts, and the SDIRK error estimate smoothed by reusing the inner W
-  factorization.
-- **`NonlinearSolveAlg`**: an inner termination check that could never fire was removed, inner failures are
-  now surfaced instead of swallowed, and the integrator decides convergence rather than the inner solver.
+## What to do with this
 
-Also structural: `GlobalDiffEq.jl` moved into the OrdinaryDiffEq monorepo as `lib/GlobalDiffEq`, following
-`DiffEqBase`, on the same reasoning — packages that must version in lockstep should release in lockstep.
+If you're already on v7 and hitting DAE initialization failures or Newton convergence failures on stiff
+problems, the continuation work is aimed at you and a good deal of it is already wired in underneath. If
+you integrate DAEs to steady state, try `Rodas3d`. If you're solving structured sparse systems and would
+rather have fewer C dependencies, LinearSolve v5's supernodal LU, with the co-installability caveat
+above. If you're differentiating a fully implicit DAE, that works now. And if you have a real fast/slow
+split with an expensive slow term, the multirate family is worth benchmarking, with the emphasis on
+benchmarking.
 
-## What to actually do with this
+One last thing, which is really just the v7 advice continuing to pay off: depend on the specific
+sublibrary rather than the umbrella. Beyond the load-time argument, `OrdinaryDiffEqRosenbrock` at v2.6.0
+has `Rodas3d` while the `OrdinaryDiffEq` umbrella at v7.1.3 still resolves it back to v2.4.2. Naming the
+sublibrary you need is how you get new solvers first.
 
-If you are on v7 already:
-
-- **Hitting DAE initialization failures or Newton convergence failures on stiff problems?** The
-  continuation work is aimed directly at you, and much of it is already wired in underneath.
-- **Integrating DAEs to steady state?** Try `Rodas3d`.
-- **Solving structured sparse systems and want fewer C dependencies?** LinearSolve v5's
-  `SupernodalLUFactorization`, with the co-installability caveat above.
-- **Differentiating a fully implicit DAE?** That now works.
-- **Have a genuine fast/slow split with an expensive slow term?** The multirate family is worth
-  benchmarking — with emphasis on *benchmarking*.
-
-And the v7 advice that keeps paying off: depend on the specific sublibrary rather than the umbrella. Beyond
-the load-time win, `OrdinaryDiffEqRosenbrock` at v2.6.0 has `Rodas3d` while the `OrdinaryDiffEq` umbrella
-at v7.1.3 still resolves it to v2.4.2. Naming the sublibrary you need is how you get the newest solvers
-first.
-
-As always, the per-repo release notes are the exhaustive record, and questions are welcome on
+Per-repo release notes remain the exhaustive record, and questions are welcome on
 [the SciML Zulip](https://julialang.zulipchat.com/#narrow/stream/279055-sciml-bridged).
