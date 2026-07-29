@@ -19,7 +19,8 @@ you move on. The ones that matter are the handful where your code keeps running 
 means something else. There are three of those and they are what the first half of this post is about.
 
 Everything below was run against OrdinaryDiffEq v7.1.3, SciMLBase v3.39.1 and RecursiveArrayTools v4.3.4
-on Julia 1.11. The outputs are what those versions actually print, not what I remember them printing.
+on Julia 1.11, and re-checked against OrdinaryDiffEq v7.2.0 and SciMLBase v3.40 when those landed. The
+outputs are what those versions actually print, not what I remember them printing.
 
 ## The silent ones
 
@@ -110,7 +111,7 @@ sol_old = RaggedVectorOfArray(sol)   # sol_old[i] is the i-th timestep again
 Treat it as a compatibility layer for unblocking a migration, though, not as something to write new code
 against.
 
-### Controller keyword arguments are accepted and then ignored
+### Controller keyword arguments were accepted and then ignored
 
 The adaptive step size controller got refactored from a pile of loose numeric knobs on `solve` into
 actual controller objects, so `gamma`, `beta1`, `beta2`, `qmin`, `qmax`, `qsteady_min`, `qsteady_max` and
@@ -118,8 +119,8 @@ actual controller objects, so `gamma`, `beta1`, `beta2`, `qmin`, `qmax`, `qstead
 a good change, and it's what makes it possible to write your own controller and pass
 `controller = MyController(…)` instead of us adding a fourteenth keyword argument to `solve`.
 
-The sharp edge is that in the released version those old keyword arguments are still on the accepted
-list, so passing them doesn't error. They just don't do anything:
+The sharp edge, on SciMLBase v3.39.1 and earlier, is that those old keyword arguments were still on the
+accepted list, so passing one didn't error. It just didn't do anything:
 
 ```julia
 for g in (0.1, 0.5, 0.9, 0.99)
@@ -136,13 +137,13 @@ gamma=0.99 nsteps=5597
 ```
 
 Identical across a 10x range of `gamma`, where on v6 those four runs would have differed substantially.
-`qmin`, `qmax`, `beta1`, `beta2` and `qoldinit` all behave the same way. A properly unknown keyword like
-`totally_bogus_kwarg` does still error, so this is specific to the controller names having been left in
+`qmin`, `qmax`, `beta1`, `beta2` and `qoldinit` all behaved the same way. A properly unknown keyword like
+`totally_bogus_kwarg` errored correctly, so this was specific to the controller names having been left in
 the allowlist after the code that consumed them was removed.
 
-If you tuned your controller, and people who tune their controller usually had a reason, your solver is
-now running on defaults and will not tell you. Grep for those names in your `solve` calls. The migration
-is to put them on the controller object:
+SciMLBase v3.40 removes them from the accepted list, so you get a real error instead. On v3.39 and
+earlier you don't, so grep for those names in your `solve` calls. Either way the migration is to put
+them on the controller object:
 
 ```julia
 # v6
@@ -153,10 +154,9 @@ using OrdinaryDiffEqCore: PIController
 solve(prob, alg; controller = PIController(0.7, -0.4))
 ```
 
-That `using OrdinaryDiffEqCore` is not a typo, incidentally; see the section on imports below. This is
-tracked as [OrdinaryDiffEq.jl#4027](https://github.com/SciML/OrdinaryDiffEq.jl/issues/4027) and the fix
-is to make these error properly, so at some point in the v7 series this section will become obsolete and
-you'll get a real error message instead. Until then it's on you to check.
+That `using OrdinaryDiffEqCore` is not a typo, incidentally; see the section on imports below. The whole
+thing was tracked as [OrdinaryDiffEq.jl#4027](https://github.com/SciML/OrdinaryDiffEq.jl/issues/4027) and
+fixed in [SciMLBase#1471](https://github.com/SciML/SciMLBase.jl/pull/1471).
 
 ## The loud ones
 
