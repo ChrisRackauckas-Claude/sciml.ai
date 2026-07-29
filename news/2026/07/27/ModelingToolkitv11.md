@@ -240,9 +240,9 @@ new contributors to have an outsized impact.
 
 ## The ModelingToolkitStandardLibrary.jl: A Deprecation That We Called Off
 
-This section changed more than any other between when it was drafted and when it was published, and
-rather than quietly rewrite it I would rather show both what we were going to say and what actually
-happened, because the difference is instructive.
+This section changed more than any other between when it was drafted and when it was published. I could
+have silently rewritten it, but the difference between what we were going to say and what happened is
+instructive enough that it seems better to show both.
 
 The plan was to announce that
 [ModelingToolkitStandardLibrary.jl](https://github.com/SciML/ModelingToolkitStandardLibrary.jl) would soon
