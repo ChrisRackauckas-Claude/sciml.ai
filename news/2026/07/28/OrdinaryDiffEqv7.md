@@ -107,14 +107,15 @@ using RecursiveArrayToolsRaggedArrays
 sol_old = RaggedVectorOfArray(sol)   # sol_old[i] is the i-th timestep again
 ```
 
-That's a compatibility layer to unblock a migration, though, not something to write new code against.
+Treat it as a compatibility layer for unblocking a migration, though, not as something to write new code
+against.
 
 ### Controller keyword arguments are accepted and then ignored
 
 The adaptive step size controller got refactored from a pile of loose numeric knobs on `solve` into
 actual controller objects, so `gamma`, `beta1`, `beta2`, `qmin`, `qmax`, `qsteady_min`, `qsteady_max` and
-`qoldinit` now live on `PIController`, `PIDController`, `IController` and `PredictiveController`. That's a
-good change, and it's what makes it possible to write your own controller and pass
+`qoldinit` now live on `PIController`, `PIDController`, `IController` and `PredictiveController`. This is
+a good change, and it's what makes it possible to write your own controller and pass
 `controller = MyController(…)` instead of us adding a fourteenth keyword argument to `solve`.
 
 The sharp edge is that in the released version those old keyword arguments are still on the accepted
