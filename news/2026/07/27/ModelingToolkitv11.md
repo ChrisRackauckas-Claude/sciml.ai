@@ -188,7 +188,7 @@ function still has some dynamic typing in it that increases the time-to-first-OD
 that all of the required breaking changes have been made, and thus we wanted to get this version out there,
 and future minor version releases in the v11 time frame will continue to improve type-stability, performance,
 and time-to-first-X based on this new foundation. Seven months later that has held up: there have been 36
-minor releases since v11.0, all of them non-breaking, and a good fraction are exactly this sort of
+minor releases since v11.0, all of them non-breaking, and a good fraction of them are this sort of
 incremental type-stability and allocation work.
 
 Major props to Aayush Sabharwal for leading this effort.
@@ -252,7 +252,7 @@ nobody was actively maintaining it, and that an alternative existed which subsum
 Then the library got maintainers again. In the seven months since v11.0 was tagged it has taken over 100
 commits and a steady stream of releases, sitting at v2.29.5 as I write this, with work from Fredrik Bagge
 Carlson, Aayush Sabharwal, Sebastian Micluța-Câmpeanu and others. And it is not busywork: a large share
-of it is exactly the sort of thing the deprecation notice was complaining about the absence of: fixing
+of it is the sort of thing the deprecation notice was complaining about the absence of: fixing
 rotational mechanics initialization and torque balance, repairing thermal and magnetic component tests,
 getting SISO initialization exercised through `ODEProblem`, tracking the v11 compatibility floors.
 Meanwhile the Dyad component libraries we were going to point people at have not seen a public push
@@ -327,8 +327,8 @@ and stable numerical simulations.
 
 That does not mean that we do not like DSLs on ModelingToolkit, oh not at all! Instead this is making `@mtkmodel`
 no longer a privileged DSL of the project. For example, SymBoltz.jl and Catalyst.jl are two great DSLs built on
-ModelingToolkit.jl, just as separate packages. Spinning `@mtkmodel` out into SciCompDSL.jl puts it on exactly
-that footing. The open call for new folks to come in and own it still stands, and as the standard library
+ModelingToolkit.jl, just as separate packages. Spinning `@mtkmodel` out into SciCompDSL.jl puts it on
+that same footing. The open call for new folks to come in and own it still stands, and as the standard library
 above shows, that call does sometimes get answered.
 
 We also must note that if someone really does need a fully developed DSL that is Modelica-like and compiles to
