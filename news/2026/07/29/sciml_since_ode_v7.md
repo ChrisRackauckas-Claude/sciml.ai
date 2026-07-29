@@ -8,7 +8,7 @@
 
 OrdinaryDiffEq v7 and DifferentialEquations v8 shipped at the end of April, and last week we
 [wrote up what breaks and how to migrate](https://sciml.ai/news/2026/07/28/OrdinaryDiffEqv7/). That was
-a long list of things you have to go fix, which is a fair description of a breaking release but not a
+a long list of things you have to go fix. That is a fair description of a breaking release, if not a
 very encouraging one. The reason we put everyone through it was to be able to build things that the old
 foundation could not support, so three months on, here is what got built.
 
@@ -28,8 +28,8 @@ asking Newton to jump straight to the answer from whatever guess you had lying a
 path: a family `H(u, p, λ)` where `λ = 0` is something trivially solvable and `λ = 1` is the problem you
 care about, and the solver tracks the solution along it. Newton's method is only locally convergent, and
 continuation is the standard answer to that. It's how you get global convergence from a bad guess, and
-more importantly it's how you handle a solution branch that folds back on itself, which parameter
-marching cannot do no matter how small you make the steps.
+more importantly it's how you handle a solution branch that folds back on itself. Parameter marching
+cannot do that however small you make the steps.
 
 The fold case is the one to look at. Take `u³ - 3u = -3 + 6λ` over `λ ∈ [0, 1]`. There are
 turning points at `u = ±1`, which is `λ = 1/6` and `λ = 5/6`. Getting from the `λ = 0` root on the lower
@@ -72,8 +72,8 @@ homotopy continuation. When a Newton iteration inside an implicit solver fails t
 is to cut `dt` and try again, and this is a more principled version of the same instinct. It ships in
 `OrdinaryDiffEqNonlinearSolve` v2.4.0 and not the umbrella, so you want
 `using OrdinaryDiffEqNonlinearSolve: HomotopyNonlinearSolveAlg`. Meanwhile ModelingToolkit now routes DAE
-and ODE initialization through the continuation solver, which is a natural fit: consistent initialization
-of a DAE is exactly the problem of solving a hard nonlinear system from a guess that might be poor, and
+and ODE initialization through the continuation solver. That is a natural fit. Consistent initialization
+of a DAE is the problem of solving a hard nonlinear system from a guess that might be poor, and
 initialization failure has been one of the most common ways a large acausal model refuses to run at all.
 
 So if you've ever stared at an "initialization failed" message on a big model, or watched a stiff solve
@@ -148,7 +148,7 @@ On a 2D five-point Laplacian, median of three runs after warmup, it's competitiv
 0.019s against UMFPACK's 0.174s and KLU's 0.012s, and by n = 10,000 the three have converged to roughly
 0.047s, 0.049s and 0.039s respectively, with relative residuals around 1e-13 for all of them. That's why
 the structured-sparse default LU now routes to it. On an unstructured matrix with random fill I measured
-it slower than UMFPACK (1.12s against 0.52s at n = 4,000), which is roughly what you'd expect from a
+it slower than UMFPACK, 1.12s against 0.52s at n = 4,000. That is about what you would expect from a
 supernodal algorithm handed a matrix with no supernodes to find. The default polyalgorithm exists so you
 don't have to make this call yourself.
 
@@ -199,12 +199,12 @@ otherwise paying a fresh compilation for each one. Opt-in.
 
 ## The unglamorous half
 
-A good fraction of the merged work in this window adds no API at all, which makes it easy to leave out of
-a post like this, and is also where most of your day-to-day solve time comes from.
+A good fraction of the merged work in this window adds no API at all. That makes it easy to leave out of
+a post like this. It is also where most of your day-to-day solve time comes from.
 
 ROCK2, ROCK4 and RKC now rotate their stage buffers instead of copying them in the in-place loops, and
 recompute the spectral radius every 25 steps by default instead of far more often. These are stabilized
-explicit methods, so they get used on exactly the large problems where both of those were real costs.
+explicit methods, so they get used on the large problems where both of those were real costs.
 Rosenbrock stage accumulation loops were fused into single-sweep SIMD kernels. The EPIRK, Exp4 and
 EXPRB53s3 steppers had their per-step allocations removed and their residual column-slice updates turned
 into views. On the implicit side, redundant sparse-Jacobian structure rebuilds are skipped in `calc_J!`,
@@ -227,7 +227,7 @@ above. If you're differentiating a fully implicit DAE, that works now. And if yo
 split with an expensive slow term, the multirate family is worth benchmarking, with the emphasis on
 benchmarking.
 
-One last thing, which is really just the v7 advice continuing to pay off: depend on the specific
+One last thing, and it is really just the v7 advice continuing to pay off: depend on the specific
 sublibrary and not the umbrella. Beyond the load-time argument, `OrdinaryDiffEqRosenbrock` at v2.6.0
 has `Rodas3d` while the `OrdinaryDiffEq` umbrella at v7.1.3 still resolves it back to v2.4.2. Naming the
 sublibrary you need is how you get new solvers first.
