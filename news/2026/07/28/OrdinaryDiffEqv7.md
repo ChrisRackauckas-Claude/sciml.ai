@@ -257,7 +257,7 @@ the rest were silently dropped, even though their roots were inside the step and
 Bouncing-ball models, multi-contact mechanics and anything using a callback as a threshold state machine
 were all affected.
 
-v7 resolves all of them and dispatches them in one call, which needs a new signature. Instead of being
+v7 resolves all of them and dispatches them in one call. That needed a new signature. Instead of being
 called once per triggering condition with that condition's index, `affect!` is called once per step with
 a `Vector{Int8}` mask over all conditions, where each entry is `0` for "didn't trigger", `+1` for an
 upcrossing and `-1` for a downcrossing. Since the sign carries the direction, `affect_neg!` is no longer
@@ -305,7 +305,7 @@ prob_func = (prob, ctx) -> remake(prob, u0 = rand(ctx.rng, length(prob.u0)))
 
 `ctx::EnsembleContext` has `ctx.i` for the trajectory index, `ctx.repeat` for the retry counter and
 `ctx.rng`, and `output_func(sol, i)` becomes `output_func(sol, ctx)` in the same way. The old signature
-simply had nowhere to thread a reproducible per-trajectory RNG through, which meant ensemble results
+simply had nowhere to thread a reproducible per-trajectory RNG through. Ensemble results therefore
 depended on thread count and scheduling, so you could not reproduce your own run on a different machine.
 Now `solve(ensemble_prob, alg; seed = 42, trajectories = N)` gives you the same answer regardless of how
 many workers happen to pick up the work.
@@ -334,7 +334,7 @@ entirely; the authoritative definitions now live only in `OrdinaryDiffEqExplicit
 Also gone: `tuples()`, `intervals()`, `QuadratureProblem` (use `IntegralProblem`), `fastpow` (use
 `FastPower.fastpower`), `concrete_solve` (use `solve`), the `syms`/`paramsyms`/`indepsym` keyword
 arguments, `sol.x` on optimization solutions (use `sol.u`), and the positional
-`Alg(stage_limiter!, step_limiter!)` constructors across 99 explicit RK methods, which want the keyword
+`Alg(stage_limiter!, step_limiter!)` constructors across 99 explicit RK methods. Those want the keyword
 form now.
 
 One more default change to flag, because this one is numerical and not just an API rename:
