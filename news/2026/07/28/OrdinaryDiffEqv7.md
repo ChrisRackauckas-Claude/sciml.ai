@@ -14,8 +14,8 @@ and the wrong way to plan an afternoon of migration work.
 
 So this post is organized differently: by how likely a change is to bite you without saying anything.
 Most of v7's breakage announces itself with an `ArgumentError` that tells you exactly what to write
-instead, and those changes are, frankly, not very interesting — you run your tests, you read the error,
-you fix it, you move on. The ones that matter are the handful where your code keeps running and quietly
+instead, and those changes are not very interesting: you run your tests, you read the error, you fix it,
+you move on. The ones that matter are the handful where your code keeps running and silently
 means something else. There are three of those and they are what the first half of this post is about.
 
 Everything below was run against OrdinaryDiffEq v7.1.3, SciMLBase v3.39.1 and RecursiveArrayTools v4.3.4
@@ -52,25 +52,25 @@ If you have a batch job that logs failures, it is about to log all of them.
 
 The fix is `successful_retcode(sol)`, and I'd suggest using it even after you've dealt with the `Symbol`
 problem, in preference to `sol.retcode == ReturnCode.Success`. There are several return codes that mean
-success — `Success`, `StalledSuccess`, `ExactSolutionLeft`, `ExactSolutionRight`, `FloatingPointLimit`
-and others — and `successful_retcode` knows about all of them. A solve that terminated exactly on a root
+success, including `Success`, `StalledSuccess`, `ExactSolutionLeft`, `ExactSolutionRight` and
+`FloatingPointLimit`, and `successful_retcode` knows about all of them. A solve that terminated exactly on a root
 is a success, and hardcoding the one enum value quietly calls it a failure. Grep for `retcode ==` and
 `retcode !=` before you upgrade.
 
 ### `sol[i]` is no longer the i-th timestep
 
 RecursiveArrayTools v4 makes `AbstractVectorOfArray`, which is the parent type of `ODESolution`, an
-honest `AbstractArray`. This is the right thing to do — it means every generic `AbstractArray` consumer
-in the ecosystem (LinearAlgebra, broadcasting, Zygote adjoints, StructArrays) works on solutions without
-SciMLBase special-casing it, and it deleted a large pile of hand-written method overrides that existed
-only to fake array behavior. But it does change what indexing means.
+honest `AbstractArray`. This is the right call. Every generic `AbstractArray` consumer in the ecosystem
+(LinearAlgebra, broadcasting, Zygote adjoints, StructArrays) now works on solutions without SciMLBase
+special-casing it, and it let us delete a large pile of hand-written method overrides that existed only
+to fake array behavior. But it does change what indexing means.
 
 Here is a 3-variable Lorenz solve with 27 saved timesteps under v7:
 
 ```julia
-size(sol)         # (3, 27)   — it's a matrix
-length(sol)       # 81        — total scalar elements
-length(sol.u)     # 27        — timesteps
+size(sol)         # (3, 27)   it's a matrix now
+length(sol)       # 81        total scalar elements
+length(sol.u)     # 27        timesteps
 sol[1]            # 1.0
 sol.u[1]          # [1.0, 0.0, 0.0]
 sol[:, 1]         # [1.0, 0.0, 0.0]
@@ -115,7 +115,7 @@ The adaptive step size controller got refactored from a pile of loose numeric kn
 actual controller objects, so `gamma`, `beta1`, `beta2`, `qmin`, `qmax`, `qsteady_min`, `qsteady_max` and
 `qoldinit` now live on `PIController`, `PIDController`, `IController` and `PredictiveController`. That's a
 good change, and it's what makes it possible to write your own controller and pass
-`controller = MyController(…)` rather than us adding a fourteenth keyword argument to `solve`.
+`controller = MyController(…)` instead of us adding a fourteenth keyword argument to `solve`.
 
 The sharp edge is that in the released version those old keyword arguments are still on the accepted
 list, so passing them doesn't error. They just don't do anything:
@@ -135,11 +135,11 @@ gamma=0.99 nsteps=5597
 ```
 
 Identical across a 10x range of `gamma`, where on v6 those four runs would have differed substantially.
-`qmin`, `qmax`, `beta1`, `beta2` and `qoldinit` all behave the same way. A genuinely unknown keyword like
+`qmin`, `qmax`, `beta1`, `beta2` and `qoldinit` all behave the same way. A properly unknown keyword like
 `totally_bogus_kwarg` does still error, so this is specific to the controller names having been left in
 the allowlist after the code that consumed them was removed.
 
-If you tuned your controller — and people who tune their controller usually had a reason — your solver is
+If you tuned your controller, and people who tune their controller usually had a reason, your solver is
 now running on defaults and will not tell you. Grep for those names in your `solve` calls. The migration
 is to put them on the controller object:
 
@@ -159,7 +159,7 @@ you'll get a real error message instead. Until then it's on you to check.
 
 ## The loud ones
 
-Everything from here on errors, so it costs you a test run rather than an afternoon.
+Everything from here on errors, so it costs you a test run instead of an afternoon.
 
 The big one is that every `Bool` keyword that used to select between code paths is now a typed object.
 `autodiff = true` becomes `autodiff = AutoForwardDiff()`, `verbose = false` becomes
@@ -167,7 +167,7 @@ The big one is that every `Bool` keyword that used to select between code paths 
 `alias = ODEAliasSpecifier(alias_u0 = true)`. The reason in every case is type stability: a `Bool` picked
 between (say) ForwardDiff and FiniteDiff at runtime, which the compiler could not specialize through,
 whereas the typed object carries that choice in its type. The error messages are good enough that you
-don't really need this post for them — passing `autodiff = true` on v7 tells you to use an `ADType` from
+don't really need this post for them. Passing `autodiff = true` on v7 tells you to use an `ADType` from
 ADTypes.jl and names two of them.
 
 The `lazy` keyword on `BS5` and `Vern6`–`Vern9` belongs to the same family and the changelog lists it
@@ -177,7 +177,7 @@ therefore none of the specialization benefit. Write `lazy = Val{false}()` anyway
 is going.
 
 The `autodiff` change is the one with a payoff beyond type stability, though, and it's worth
-understanding rather than mechanically fixing. Because the backend is now an `ADTypes` object instead of
+understanding instead of mechanically fixing. Because the backend is now an `ADTypes` object instead of
 a `Bool` plus a scattering of ForwardDiff-specific and FiniteDiff-specific keywords (`chunk_size`,
 `diff_type`, `standardtag`), every implicit solver in the library now works with every AD backend for
 free. Switching to Enzyme is `autodiff = AutoEnzyme()` and nothing else:
@@ -237,7 +237,7 @@ DAE initialization failed: your u0 did not satisfy the initialization requiremen
 normresid = 0.707… > abstol = 1.0e-6.
 ```
 
-where v6 would have quietly corrected it and carried on. The old behavior sounds friendlier but it
+where v6 would have silently corrected it and carried on. The old behavior sounds friendlier but it
 produced wrong answers in the case that actually matters: when your `u0` was correct and a modeling bug
 somewhere else made the system look inconsistent, v6 would "fix" the initial condition to match the buggy
 model and hand you a plausible-looking trajectory. Erroring surfaces the modeling bug. If you want the
@@ -250,7 +250,7 @@ solve(prob, Rodas5P(); initializealg = BrownFullBasicInit())
 
 ### `VectorContinuousCallback` fires every simultaneous event
 
-This was a real bug rather than a design change. When several conditions of a single
+This one was a bug fix, not a design change. When several conditions of a single
 `VectorContinuousCallback` crossed zero within the same step, only the first crossing's `affect!` ran and
 the rest were silently dropped, even though their roots were inside the step and had been located.
 Bouncing-ball models, multi-contact mechanics and anything using a callback as a threshold state machine
@@ -260,8 +260,8 @@ v7 resolves all of them and dispatches them in one call, which needs a new signa
 called once per triggering condition with that condition's index, `affect!` is called once per step with
 a `Vector{Int8}` mask over all conditions, where each entry is `0` for "didn't trigger", `+1` for an
 upcrossing and `-1` for a downcrossing. Since the sign carries the direction, `affect_neg!` is no longer
-used for `VectorContinuousCallback` at all — one function handles both. (`ContinuousCallback` keeps its
-`affect!` / `affect_neg!` split, so this is not a general change.)
+used for `VectorContinuousCallback` at all, since one function now handles both. (`ContinuousCallback`
+keeps its `affect!` / `affect_neg!` split, so this is not a general change.)
 
 ```julia
 # v6
@@ -290,7 +290,7 @@ cb = VectorContinuousCallback(condition, affect!, 2)
 ```
 
 The first v7 releases had this sign convention flipped and it was corrected quickly, so make sure you're
-on a current v7.1.x rather than debugging against the initial tag.
+on a current v7.1.x before you go debugging against the initial tag.
 
 ### Ensembles carry an RNG now
 
@@ -305,7 +305,7 @@ prob_func = (prob, ctx) -> remake(prob, u0 = rand(ctx.rng, length(prob.u0)))
 `ctx::EnsembleContext` has `ctx.i` for the trajectory index, `ctx.repeat` for the retry counter and
 `ctx.rng`, and `output_func(sol, i)` becomes `output_func(sol, ctx)` in the same way. The old signature
 simply had nowhere to thread a reproducible per-trajectory RNG through, which meant ensemble results
-depended on thread count and scheduling — you could not reproduce your own run on a different machine.
+depended on thread count and scheduling, so you could not reproduce your own run on a different machine.
 Now `solve(ensemble_prob, alg; seed = 42, trajectories = N)` gives you the same answer regardless of how
 many workers happen to pick up the work.
 
@@ -336,7 +336,7 @@ arguments, `sol.x` on optimization solutions (use `sol.u`), and the positional
 `Alg(stage_limiter!, step_limiter!)` constructors across 99 explicit RK methods, which want the keyword
 form now.
 
-One more default worth flagging because it's a numerical change rather than an API change:
+One more default change to flag, because this one is numerical and not just an API rename:
 `williamson_condition` now defaults to `false` on all 2N low-storage RK methods. That optimization only
 works for mutable `Array`-style state, so having it on by default silently misbehaved for StaticArrays,
 GPU arrays and ComponentArrays. Turn it back on when you know your state is a plain `Array`.
@@ -348,8 +348,8 @@ reachable from a plain `using OrdinaryDiffEq`. Checked on v7.1.3:
 
 | Symbol | From `using OrdinaryDiffEq`? | Where it lives |
 |---|---|---|
-| `ODEAliasSpecifier` | yes | — |
-| `successful_retcode`, `ReturnCode` | yes | — |
+| `ODEAliasSpecifier` | yes | the umbrella |
+| `successful_retcode`, `ReturnCode` | yes | the umbrella |
 | `DEVerbosity` | no | `DiffEqBase`, `OrdinaryDiffEqCore` |
 | `PIController`, `PIDController`, `IController` | no | `OrdinaryDiffEqCore` |
 | `CheckInit`, `NoInit`, `OverrideInit` | no | `SciMLBase`, `DiffEqBase`, `OrdinaryDiffEqCore` |
@@ -372,7 +372,7 @@ using DiffEqBase: DEVerbosity
 solve(prob, Tsit5(); verbose = DEVerbosity(SciMLLogging.None()))
 ```
 
-This is a rough edge from the reorganization rather than anything intentional and it's being tidied up.
+This is a rough edge left over from the reorganization, not anything intentional, and it's being tidied up.
 In the meantime, if a v7 replacement type gives you an `UndefVarError`, try `DiffEqBase` first and
 `OrdinaryDiffEqCore` second.
 
@@ -380,15 +380,14 @@ In the meantime, if a v7 replacement type gives you an `UndefVarError`, try `Dif
 
 Don't jump from an old environment straight onto v7. Nearly every rename in the table above already
 exists under its new name on SciMLBase v2 and OrdinaryDiffEq v6, with deprecation warnings pointing at
-the exact call sites that will break. So stay on v6 first and update to the new names there —
+the exact call sites that will break. So stay on v6 first and update to the new names there:
 `has_stats`, `sol.stats`, `AbstractDEAlgorithm`, `derivative_discontinuity!`, `ODEAliasSpecifier`,
-`DEVerbosity`, `ADTypes`-based `autodiff`, explicit controller objects, the new tableau names — and
-change every `sol[i]` to `sol.u[i]` while you're there. Then get your tests passing on v6 with no
+`DEVerbosity`, `ADTypes`-based `autodiff`, explicit controller objects, the new tableau names. Change
+every `sol[i]` to `sol.u[i]` while you're there. Then get your tests passing on v6 with no
 deprecation warnings at all, because those warnings are your migration checklist and a clean run means
 you've worked through it. Only then bump to v7.
 
-What's left after that is the genuinely new breakage that no deprecation warning could have told you
-about: RAT v4 indexing semantics, the ensemble signature, the struct type parameter removals, the
+What's left after that is the truly new breakage that no deprecation warning could have told you about: RAT v4 indexing semantics, the ensemble signature, the struct type parameter removals, the
 `VectorContinuousCallback` signature, and the default changes. That's a much shorter list than the one
 you started with.
 
@@ -410,8 +409,8 @@ jumps, `SteadyStateDiffEq` for steady states, `Sundials` for CVODE/IDA/ARKODE, a
 `LinearSolve`/`NonlinearSolve`/`Optimization` for the solvers that were never really differential
 equations in the first place.
 
-The umbrella made everyone pay the load time for every solver family and made it genuinely unclear which
-package a given algorithm came from — a question we got asked a lot. Now each topic versions
+The umbrella made everyone pay the load time for every solver family, and it made it hard to tell which
+package a given algorithm came from, which was a question we got asked a lot. Now each topic versions
 independently and your `Project.toml` is honest about what your script uses. The DiffEqDocs solver pages
 annotate every algorithm with its host package.
 
@@ -421,7 +420,7 @@ on OrdinaryDiffEq directly.
 Two smaller things in the same family. `DiffEqBase` is now a sublibrary at `lib/DiffEqBase` inside the
 OrdinaryDiffEq monorepo, on the reasoning that it was tightly coupled to OrdinaryDiffEq's internals
 anyway and releasing them in lockstep removes an entire class of compatibility bug. And
-`StochasticDelayDiffEq.jl` is deprecated — use `DelayDiffEq.jl` directly, which has handled SDDE problems
+`StochasticDelayDiffEq.jl` is deprecated. Use `DelayDiffEq.jl` directly, which has handled SDDE problems
 for some time now. It will not get a v7-compatible release.
 
 ## Was it worth it
@@ -431,7 +430,7 @@ making `Bool` switches into types the compiler can specialize on, replacing Forw
 surfaces with `ADTypes` so every solver generalizes to every backend, turning keyword piles into
 extensible objects, and deleting shims that had been warning for several releases.
 
-The migration is real work and the three silent changes deserve a careful pass rather than a version bump
+The migration is real work, and the three silent changes deserve a careful pass instead of a version bump
 and a hope. But going through v6's deprecation warnings first makes most of it mechanical, and what you
 get out the other side starts faster, specializes properly, and doesn't have ForwardDiff assumptions
 baked into a hundred struct signatures.
