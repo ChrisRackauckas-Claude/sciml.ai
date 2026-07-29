@@ -9,7 +9,7 @@
 OrdinaryDiffEq.jl v7 and DifferentialEquations.jl v8 are out, along with SciMLBase v3 and
 RecursiveArrayTools v4. This is the first breaking release of the ODE stack in a long while and there is
 quite a lot in it. The [full changelog](https://github.com/SciML/OrdinaryDiffEq.jl/blob/master/NEWS.md)
-runs to several hundred lines and is organized by subsystem, which is the right way to write a changelog
+runs to several hundred lines and is organized by subsystem. That is the right way to write a changelog
 and the wrong way to plan an afternoon of migration work.
 
 So this post is organized differently: by how likely a change is to bite you without saying anything.
@@ -48,14 +48,14 @@ end
 ```
 
 now takes the failure branch on every single successful solve and nothing anywhere complains about it.
-If you have a batch job that logs failures, it is about to log all of them.
+Anyone running a batch job that logs failures is about to log all of them.
 
 The fix is `successful_retcode(sol)`, and I'd suggest using it even after you've dealt with the `Symbol`
 problem, in preference to `sol.retcode == ReturnCode.Success`. There are several return codes that mean
 success, including `Success`, `StalledSuccess`, `ExactSolutionLeft`, `ExactSolutionRight` and
-`FloatingPointLimit`, and `successful_retcode` knows about all of them. A solve that terminated exactly on a root
-is a success, and hardcoding the one enum value quietly calls it a failure. Grep for `retcode ==` and
-`retcode !=` before you upgrade.
+`FloatingPointLimit`, and `successful_retcode` knows about all of them. A solve that terminated exactly
+on a root is a success, and hardcoding the one enum value silently calls it a failure. Grep for
+`retcode ==` and `retcode !=` before you upgrade.
 
 ### `sol[i]` is no longer the i-th timestep
 
@@ -99,8 +99,8 @@ search-and-replace you can do today, on your current version, and have it be cor
 bump. If you do one thing to prepare for v7, do this one. The same applies to ensembles: `sim[j]` becomes
 `sim.u[j]`, `sim[i, j]` becomes `sim.u[j].u[i]`, `length(sim)` becomes `length(sim.u)`.
 
-If you have a large code base that assumes timestep-first indexing everywhere and you need to buy
-yourself some time, `RecursiveArrayToolsRaggedArrays.jl` will give you the old semantics back:
+For a large code base that assumes timestep-first indexing everywhere, there is a way to buy some time.
+`RecursiveArrayToolsRaggedArrays.jl` gives you the old semantics back:
 
 ```julia
 using RecursiveArrayToolsRaggedArrays
@@ -222,7 +222,7 @@ This is the single largest contributor to v7's time-to-first-solve improvement, 
 defaulting to `AutoSpecialize` and dropping `Static.jl`, `StaticArrayInterface.jl`, `Polyester.jl` and
 `StaticArrays.jl` as direct dependencies. The old umbrella loaded every exponential integrator, every
 symplectic method, every stabilized method and every multirate method whether you touched them or not.
-If you want to push it further you can import a single solver: `using OrdinaryDiffEqTsit5: Tsit5`.
+To push it further, import a single solver: `using OrdinaryDiffEqTsit5: Tsit5`.
 
 While you're editing those lines anyway: if you're still explicitly asking for `Rodas5`, switch to
 `Rodas5P`. Very similar performance profile, considerably more robust on accuracy, and there's not really
@@ -240,8 +240,8 @@ normresid = 0.707… > abstol = 1.0e-6.
 where v6 would have silently corrected it and carried on. The old behavior sounds friendlier but it
 produced wrong answers in the case that actually matters: when your `u0` was correct and a modeling bug
 somewhere else made the system look inconsistent, v6 would "fix" the initial condition to match the buggy
-model and hand you a plausible-looking trajectory. Erroring surfaces the modeling bug. If you want the
-old behavior you can still have it, you just have to ask:
+model and hand you a plausible-looking trajectory. Erroring surfaces the modeling bug. The old behavior is
+still available, you just have to ask for it:
 
 ```julia
 using DiffEqBase: BrownFullBasicInit
@@ -312,7 +312,7 @@ many workers happen to pick up the work.
 ### Renames and removals
 
 These all already exist under their new names on SciMLBase v2 and OrdinaryDiffEq v6 with deprecation
-warnings, which matters for the upgrade path below:
+warnings. That matters for the upgrade path below:
 
 | Old | New |
 |---|---|
@@ -387,12 +387,13 @@ every `sol[i]` to `sol.u[i]` while you're there. Then get your tests passing on 
 deprecation warnings at all, because those warnings are your migration checklist and a clean run means
 you've worked through it. Only then bump to v7.
 
-What's left after that is the truly new breakage that no deprecation warning could have told you about: RAT v4 indexing semantics, the ensemble signature, the struct type parameter removals, the
+What's left after that is the truly new breakage that no deprecation warning could have told you about:
+RAT v4 indexing semantics, the ensemble signature, the struct type parameter removals, the
 `VectorContinuousCallback` signature, and the default changes. That's a much shorter list than the one
 you started with.
 
-Before you begin, three greps. These cover the silent changes, which are exactly the ones the deprecation
-warnings can't help you with:
+Before you begin, three greps. The deprecation warnings can't help you with the silent changes, so these
+cover those:
 
 ```
 retcode ==
@@ -410,8 +411,8 @@ jumps, `SteadyStateDiffEq` for steady states, `Sundials` for CVODE/IDA/ARKODE, a
 equations in the first place.
 
 The umbrella made everyone pay the load time for every solver family, and it made it hard to tell which
-package a given algorithm came from, which was a question we got asked a lot. Now each topic versions
-independently and your `Project.toml` is honest about what your script uses. The DiffEqDocs solver pages
+package a given algorithm came from. We got asked that a lot. Now each topic versions independently and
+your `Project.toml` is honest about what your script uses. The DiffEqDocs solver pages
 annotate every algorithm with its host package.
 
 v7 and v8 are independent of each other, and for ODE-only work I'd skip the umbrella entirely and depend
