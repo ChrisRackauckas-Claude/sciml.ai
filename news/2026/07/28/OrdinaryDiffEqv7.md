@@ -6,39 +6,38 @@
 
 # OrdinaryDiffEq.jl v7 and DifferentialEquations.jl v8: What Breaks, What to Do About It
 
-OrdinaryDiffEq.jl v7 and DifferentialEquations.jl v8 are out. This is the first breaking release of the
-ODE stack in a long time, and it comes with a matching bump of **SciMLBase to v3** and
-**RecursiveArrayTools to v4**. There is a lot in it, and the [full changelog in
-`NEWS.md`](https://github.com/SciML/OrdinaryDiffEq.jl/blob/master/NEWS.md) is long.
+OrdinaryDiffEq.jl v7 and DifferentialEquations.jl v8 are out, along with SciMLBase v3 and
+RecursiveArrayTools v4. This is the first breaking release of the ODE stack in a long while and there is
+quite a lot in it. The [full changelog](https://github.com/SciML/OrdinaryDiffEq.jl/blob/master/NEWS.md)
+runs to several hundred lines and is organized by subsystem, which is the right way to write a changelog
+and the wrong way to plan an afternoon of migration work.
 
-This post is not the full changelog. It is the shorter thing you actually want: **the changes most likely
-to break your code, ranked by how hard they are to notice.** Everything shown below was run against
-OrdinaryDiffEq v7.1.3, SciMLBase v3.39.1, and RecursiveArrayTools v4.3.4 on Julia 1.11, and the outputs
-are what those versions actually print.
+So this post is organized differently: by how likely a change is to bite you without saying anything.
+Most of v7's breakage announces itself with an `ArgumentError` that tells you exactly what to write
+instead, and those changes are, frankly, not very interesting — you run your tests, you read the error,
+you fix it, you move on. The ones that matter are the handful where your code keeps running and quietly
+means something else. There are three of those and they are what the first half of this post is about.
 
-If you read only one section, read the next one.
+Everything below was run against OrdinaryDiffEq v7.1.3, SciMLBase v3.39.1 and RecursiveArrayTools v4.3.4
+on Julia 1.11. The outputs are what those versions actually print, not what I remember them printing.
 
-## The three changes that break your code silently
+## The silent ones
 
-Most of v7's breaking changes announce themselves with a loud `ArgumentError` telling you exactly what to
-write instead. Those are fine — you run your tests, you get an error, you fix it. The dangerous changes are
-the ones where your code keeps running and quietly means something different. There are three of these,
-and they are the reason to read a migration guide rather than just bumping and seeing what explodes.
+### `sol.retcode == :Success` is now false
 
-### 1. `sol.retcode == :Success` is now silently `false`
-
-This is the one most likely to bite, because it turns a passing check into a failing one with no error:
+Start here, because this one turns a passing check into a failing one and never says a word about it:
 
 ```julia
 sol = solve(prob, Tsit5())
 
-sol.retcode == :Success        # v7: false — even though the solve succeeded
-successful_retcode(sol)        # v7: true  — the correct check
+sol.retcode == :Success        # false, on a solve that succeeded
+successful_retcode(sol)        # true
 ```
 
-`sol.retcode` has been a `ReturnCode.T` enum rather than a `Symbol` for years, with a deprecation warning
-on every `Symbol` comparison throughout the v2 series. v3 removed the shim. Comparing an enum to a `Symbol`
-is not an error in Julia — it is just `false`. So any code shaped like
+`sol.retcode` has been a `ReturnCode.T` enum rather than a `Symbol` for years now, and every `Symbol`
+comparison printed a deprecation warning for the entire v2 series. v3 finally removed the shim. The
+trouble is that comparing an enum against a `Symbol` isn't an error in Julia, it's just `false`, so code
+shaped like
 
 ```julia
 if sol.retcode == :Success
@@ -48,85 +47,78 @@ else
 end
 ```
 
-now takes the failure branch on every successful solve, and nothing anywhere prints a warning.
+now takes the failure branch on every single successful solve and nothing anywhere complains about it.
+If you have a batch job that logs failures, it is about to log all of them.
 
-**Migration:** use `successful_retcode`, not equality against a specific code.
+The fix is `successful_retcode(sol)`, and I'd suggest using it even after you've dealt with the `Symbol`
+problem, in preference to `sol.retcode == ReturnCode.Success`. There are several return codes that mean
+success — `Success`, `StalledSuccess`, `ExactSolutionLeft`, `ExactSolutionRight`, `FloatingPointLimit`
+and others — and `successful_retcode` knows about all of them. A solve that terminated exactly on a root
+is a success, and hardcoding the one enum value quietly calls it a failure. Grep for `retcode ==` and
+`retcode !=` before you upgrade.
 
-```julia
-successful_retcode(sol)     # ✔ preferred
-```
+### `sol[i]` is no longer the i-th timestep
 
-This is better than `sol.retcode == ReturnCode.Success` even after you fix the `Symbol` problem, because
-`successful_retcode` accepts every success-ish code — `Success`, `StalledSuccess`, `ExactSolutionLeft`,
-`ExactSolutionRight`, `FloatingPointLimit`, and so on. A solve that terminated exactly on a root is a
-success, and hardcoding `== ReturnCode.Success` misclassifies it as a failure.
+RecursiveArrayTools v4 makes `AbstractVectorOfArray`, which is the parent type of `ODESolution`, an
+honest `AbstractArray`. This is the right thing to do — it means every generic `AbstractArray` consumer
+in the ecosystem (LinearAlgebra, broadcasting, Zygote adjoints, StructArrays) works on solutions without
+SciMLBase special-casing it, and it deleted a large pile of hand-written method overrides that existed
+only to fake array behavior. But it does change what indexing means.
 
-Grep your code base for `retcode ==` and `retcode !=` before you upgrade. It is a two-minute search that
-saves a genuinely confusing afternoon.
-
-### 2. `sol[i]` no longer means "the i-th timestep"
-
-RecursiveArrayTools v4 makes `AbstractVectorOfArray` — the parent type of `ODESolution` — an honest
-`AbstractArray`. That is the right call: every generic `AbstractArray` consumer (LinearAlgebra,
-broadcasting, Zygote adjoints, `StructArrays`) now works on solutions without special-casing, and it
-deletes a large pile of manual method overrides in SciMLBase. But it changes what indexing means.
-
-Here is a 3-variable Lorenz solve with 27 saved timesteps, run on v7:
+Here is a 3-variable Lorenz solve with 27 saved timesteps under v7:
 
 ```julia
-size(sol)         # (3, 27)   — it's a matrix now
-length(sol)       # 81        — total scalar elements (3 × 27)
-length(sol.u)     # 27        — number of timesteps
-sol[1]            # 1.0       — the first scalar, column-major
-sol.u[1]          # [1.0, 0.0, 0.0]  — the first timestep
-sol[:, 1]         # [1.0, 0.0, 0.0]  — also the first timestep
+size(sol)         # (3, 27)   — it's a matrix
+length(sol)       # 81        — total scalar elements
+length(sol.u)     # 27        — timesteps
+sol[1]            # 1.0
+sol.u[1]          # [1.0, 0.0, 0.0]
+sol[:, 1]         # [1.0, 0.0, 0.0]
 first(sol)        # 1.0
 first(sol.u)      # [1.0, 0.0, 0.0]
-eachindex(sol)    # CartesianIndices — not 1:27
+eachindex(sol)    # CartesianIndices, not 1:27
 ```
 
-So `sol[1]` used to give you a state vector and now gives you a `Float64`. Code that iterates
-`for u in sol` used to walk timesteps and now walks scalars. Code that calls `length(sol)` to count
-timesteps now gets the element count. None of this errors — you just get 81 where you expected 27, or a
-scalar where you expected a vector, and the failure surfaces somewhere far away from the cause.
+`sol[1]` used to hand you a state vector and now hands you a `Float64`. `for u in sol` used to walk
+timesteps and now walks scalars in column-major order. `length(sol)` used to count timesteps and now
+counts elements. None of this errors; you just get 81 where you expected 27, or a number where you
+expected a vector, and the actual failure shows up somewhere far away from the line that caused it.
 
-| Operation | v6 meaning | v7 meaning | Write instead |
+| Operation | v6 | v7 | Write instead |
 |---|---|---|---|
 | `sol[i]` | i-th timestep | i-th scalar element | `sol.u[i]` or `sol[:, i]` |
 | `length(sol)` | number of timesteps | total scalar count | `length(sol.t)` or `length(sol.u)` |
 | `eachindex(sol)` | `1:nsteps` | `CartesianIndices` | `eachindex(sol.u)` |
-| `for u in sol` | iterates timesteps | iterates scalars | `for u in sol.u` |
+| `for u in sol` | timesteps | scalars | `for u in sol.u` |
 | `first(sol)` / `last(sol)` | first/last timestep | first/last scalar | `first(sol.u)` / `last(sol.u)` |
-| `map(f, sol)` | maps over timesteps | maps over scalars | `map(f, sol.u)` |
-| `maximum(sol)` | max over timesteps | max over all scalars | `maximum(f, sol.u)` |
+| `map(f, sol)` | over timesteps | over scalars | `map(f, sol.u)` |
+| `maximum(sol)` | over timesteps | over all scalars | `maximum(f, sol.u)` |
 
-**Migration, and the nice part:** `sol.u[i]` means the same thing on v6 *and* v7. So you can do this
-search-and-replace today, on your current version, and it is correct before and after the bump. That is
-the single highest-value thing you can do to prepare.
+The convenient part is that `sol.u[i]` means the same thing on v6 and on v7, so this is a
+search-and-replace you can do today, on your current version, and have it be correct before and after the
+bump. If you do one thing to prepare for v7, do this one. The same applies to ensembles: `sim[j]` becomes
+`sim.u[j]`, `sim[i, j]` becomes `sim.u[j].u[i]`, `length(sim)` becomes `length(sim.u)`.
 
-The same change applies to `EnsembleSolution`: `sim[j]` → `sim.u[j]`, `sim[i, j]` → `sim.u[j].u[i]`,
-`length(sim)` → `length(sim.u)`.
-
-**Escape hatch:** if you have a large code base that assumes timestep-first indexing and you need to buy
-time, `RecursiveArrayToolsRaggedArrays.jl` preserves the old semantics:
+If you have a large code base that assumes timestep-first indexing everywhere and you need to buy
+yourself some time, `RecursiveArrayToolsRaggedArrays.jl` will give you the old semantics back:
 
 ```julia
 using RecursiveArrayToolsRaggedArrays
-sol_old = RaggedVectorOfArray(sol)   # sol_old[i] is the i-th timestep, as in v3
+sol_old = RaggedVectorOfArray(sol)   # sol_old[i] is the i-th timestep again
 ```
 
-Treat this as a compatibility layer to unblock a migration, not as the API to write new code against.
+That's a compatibility layer to unblock a migration, though, not something to write new code against.
 
-### 3. Controller keyword arguments are accepted and then ignored
+### Controller keyword arguments are accepted and then ignored
 
-The adaptive step size controller was refactored from a pile of loose numeric knobs on `solve` into real,
-pluggable controller objects. `gamma`, `beta1`, `beta2`, `qmin`, `qmax`, `qsteady_min`, `qsteady_max`, and
-`qoldinit` moved onto `PIController` / `PIDController` / `IController` / `PredictiveController`.
+The adaptive step size controller got refactored from a pile of loose numeric knobs on `solve` into
+actual controller objects, so `gamma`, `beta1`, `beta2`, `qmin`, `qmax`, `qsteady_min`, `qsteady_max` and
+`qoldinit` now live on `PIController`, `PIDController`, `IController` and `PredictiveController`. That's a
+good change, and it's what makes it possible to write your own controller and pass
+`controller = MyController(…)` rather than us adding a fourteenth keyword argument to `solve`.
 
-This is a good change — you can now write a custom controller and pass `controller = MyController(…)`
-instead of the SciML developers adding yet another `solve` kwarg. But there is a sharp edge in the
-released version. Those old keyword arguments are still on `solve`'s accepted-keyword list, so passing
-them does not error. They simply do nothing:
+The sharp edge is that in the released version those old keyword arguments are still on the accepted
+list, so passing them doesn't error. They just don't do anything:
 
 ```julia
 for g in (0.1, 0.5, 0.9, 0.99)
@@ -142,16 +134,14 @@ gamma=0.9  nsteps=5597
 gamma=0.99 nsteps=5597
 ```
 
-Identical step counts across a 10x range of `gamma`. On v6 those four runs would differ substantially.
-`qmin`, `qmax`, `beta1`, `beta2`, and `qoldinit` behave the same way — accepted, ignored. (A genuinely
-unknown keyword like `totally_bogus_kwarg` *does* error, so this is specific to the controller keywords
-still sitting in the allowlist.)
+Identical across a 10x range of `gamma`, where on v6 those four runs would have differed substantially.
+`qmin`, `qmax`, `beta1`, `beta2` and `qoldinit` all behave the same way. A genuinely unknown keyword like
+`totally_bogus_kwarg` does still error, so this is specific to the controller names having been left in
+the allowlist after the code that consumed them was removed.
 
-If you tuned your step size controller — and people who tuned it usually had a reason — your solver is
-now silently running with default settings. **Grep for `gamma`, `qmin`, `qmax`, `beta1`, `beta2`, and
-`qoldinit` in your `solve` calls.**
-
-**Migration:** move them onto a controller object.
+If you tuned your controller — and people who tune their controller usually had a reason — your solver is
+now running on defaults and will not tell you. Grep for those names in your `solve` calls. The migration
+is to put them on the controller object:
 
 ```julia
 # v6
@@ -162,42 +152,35 @@ using OrdinaryDiffEqCore: PIController
 solve(prob, alg; controller = PIController(0.7, -0.4))
 ```
 
-Note the `using OrdinaryDiffEqCore` — see the import gotcha section below.
+That `using OrdinaryDiffEqCore` is not a typo, incidentally; see the section on imports below. This is
+tracked as [OrdinaryDiffEq.jl#4027](https://github.com/SciML/OrdinaryDiffEq.jl/issues/4027) and the fix
+is to make these error properly, so at some point in the v7 series this section will become obsolete and
+you'll get a real error message instead. Until then it's on you to check.
 
-## The changes that break loudly
+## The loud ones
 
-These all raise an error with a helpful message, so they cost you one test run each. Grouped by theme.
+Everything from here on errors, so it costs you a test run rather than an afternoon.
 
-### Bool keywords are now typed objects
+The big one is that every `Bool` keyword that used to select between code paths is now a typed object.
+`autodiff = true` becomes `autodiff = AutoForwardDiff()`, `verbose = false` becomes
+`verbose = DEVerbosity(SciMLLogging.None())`, and `alias = true` becomes
+`alias = ODEAliasSpecifier(alias_u0 = true)`. The reason in every case is type stability: a `Bool` picked
+between (say) ForwardDiff and FiniteDiff at runtime, which the compiler could not specialize through,
+whereas the typed object carries that choice in its type. The error messages are good enough that you
+don't really need this post for them — passing `autodiff = true` on v7 tells you to use an `ADType` from
+ADTypes.jl and names two of them.
 
-Every `Bool` solver and `solve` keyword that used to select between code paths is now a typed object.
-The reason is type stability: a `Bool` chose between (say) ForwardDiff and FiniteDiff at *runtime*, which
-the compiler could not specialize through. A typed object carries the choice in its type.
+The `lazy` keyword on `BS5` and `Vern6`–`Vern9` belongs to the same family and the changelog lists it
+alongside the others, but be aware that it is not actually enforced yet: `Vern7(lazy = false)` still
+constructs and still solves, it just gives you a `Bool` type parameter instead of `Val{false}` and
+therefore none of the specialization benefit. Write `lazy = Val{false}()` anyway, since that is where it
+is going.
 
-```julia
-# v6
-Rosenbrock23(autodiff = true)
-solve(prob, alg; verbose = false, alias = true)
-
-# v7
-Rosenbrock23(autodiff = AutoForwardDiff())
-solve(prob, alg;
-    verbose = DEVerbosity(SciMLLogging.None()),
-    alias   = ODEAliasSpecifier(alias_u0 = true))
-```
-
-The error messages are good. Passing `autodiff = true` on v7 gives you:
-
-```
-ArgumentError: Passing a `Bool` for keyword argument `autodiff` is no longer supported.
-Use an `ADType` specifier from ADTypes.jl, e.g. `AutoForwardDiff()` or `AutoFiniteDiff()`.
-```
-
-The `autodiff` change is the one with a real payoff beyond type stability: because the backend is now an
-`ADTypes` object rather than a `Bool` plus a pile of ForwardDiff-specific keywords (`chunk_size`,
-`diff_type`, `standardtag`), **every implicit solver now works with every AD backend**. Swapping to Enzyme
-is `autodiff = AutoEnzyme()` and nothing else. That also explains why the `{CS, AD, FDT, ST, CJ}` type
-parameters were removed from 100+ algorithm structs — five type parameters collapsed into one field.
+The `autodiff` change is the one with a payoff beyond type stability, though, and it's worth
+understanding rather than mechanically fixing. Because the backend is now an `ADTypes` object instead of
+a `Bool` plus a scattering of ForwardDiff-specific and FiniteDiff-specific keywords (`chunk_size`,
+`diff_type`, `standardtag`), every implicit solver in the library now works with every AD backend for
+free. Switching to Enzyme is `autodiff = AutoEnzyme()` and nothing else:
 
 ```julia
 # v6
@@ -206,10 +189,17 @@ Rodas5P(chunk_size = 12, diff_type = Val{:central}, standardtag = true)
 # v7
 Rodas5P(autodiff = AutoForwardDiff(chunksize = 12))
 Rodas5P(autodiff = AutoFiniteDiff(fdtype = Val(:central)))
-Rodas5P(autodiff = AutoEnzyme())     # now just works
+Rodas5P(autodiff = AutoEnzyme())
 ```
 
-### `using OrdinaryDiffEq` loads only the default solver set
+This is also why the `{CS, AD, FDT, ST, CJ}` type parameters came off of more than a hundred algorithm
+structs. Five type parameters collapsed into one field. If you were dispatching on
+`SomeAlg{CS, AD, FDT, ST, CJ}` anywhere that will break, and what you almost certainly want now is either
+`SomeAlg` with no parameters at all or a dispatch on `alg.autodiff`.
+
+### The umbrella got smaller
+
+`using OrdinaryDiffEq` now loads only the default solver set:
 
 ```julia
 # v6
@@ -221,69 +211,57 @@ using OrdinaryDiffEqSDIRK   # required
 solve(prob, KenCarp4())
 ```
 
-What you still get from the umbrella: `DefaultODEAlgorithm`, `Tsit5`, `AutoTsit5`, `Vern6`–`Vern9`,
-`AutoVern6`–`AutoVern9`, `Rosenbrock23`, `Rodas5P`, and `FBDF`. Everything else needs its sublibrary.
-The mapping is predictable — `KenCarp*`/`TRBDF2` → `OrdinaryDiffEqSDIRK`, most `Rosenbrock*`/`Rodas*` →
-`OrdinaryDiffEqRosenbrock`, `RadauIIA*` → `OrdinaryDiffEqFIRK` — and every family has its own
-`lib/OrdinaryDiffEq<X>` directory in the repo.
+You still get `DefaultODEAlgorithm`, `Tsit5`, `AutoTsit5`, `Vern6` through `Vern9`, `AutoVern6` through
+`AutoVern9`, `Rosenbrock23`, `Rodas5P` and `FBDF` from the umbrella. Everything else needs its
+sublibrary, and the mapping is predictable enough to guess: `KenCarp*` and `TRBDF2` are in
+`OrdinaryDiffEqSDIRK`, most of the `Rosenbrock*` and `Rodas*` family is in `OrdinaryDiffEqRosenbrock`,
+`RadauIIA*` is in `OrdinaryDiffEqFIRK`, and every family has its own `lib/OrdinaryDiffEq<X>` directory in
+the repo if you need to look.
 
-This is the largest single contributor to v7's time-to-first-solve reduction, together with `ODEFunction`
-switching to `AutoSpecialize` by default and the removal of the `Static.jl`, `StaticArrayInterface.jl`,
-`Polyester.jl`, and `StaticArrays.jl` dependencies. If you want to go further, import just the one you
-need: `using OrdinaryDiffEqTsit5: Tsit5`.
+This is the single largest contributor to v7's time-to-first-solve improvement, along with `ODEFunction`
+defaulting to `AutoSpecialize` and dropping `Static.jl`, `StaticArrayInterface.jl`, `Polyester.jl` and
+`StaticArrays.jl` as direct dependencies. The old umbrella loaded every exponential integrator, every
+symplectic method, every stabilized method and every multirate method whether you touched them or not.
+If you want to push it further you can import a single solver: `using OrdinaryDiffEqTsit5: Tsit5`.
 
-While you are in there: if you are still explicitly choosing `Rodas5`, switch to `Rodas5P`. Very similar
-performance profile, considerably more robust accuracy.
+While you're editing those lines anyway: if you're still explicitly asking for `Rodas5`, switch to
+`Rodas5P`. Very similar performance profile, considerably more robust on accuracy, and there's not really
+a good reason to prefer the older one anymore.
 
-### DAE initialization now errors instead of silently fixing
+### DAE initialization errors instead of silently fixing
 
-```julia
-# v6: inconsistent u0 silently corrected
-solve(prob, Rodas5P())
-
-# v7: errors
-solve(prob, Rodas5P())
-```
-
-On v7 an inconsistent initial condition gives you:
+The default is now `CheckInit`, so an inconsistent initial condition gets you
 
 ```
 DAE initialization failed: your u0 did not satisfy the initialization requirements,
 normresid = 0.707… > abstol = 1.0e-6.
 ```
 
-**Why:** silently fixing an inconsistent initial condition produced wrong answers when the user's `u0` was
-actually right and a modeling bug elsewhere made the system look inconsistent. Erroring surfaces the
-modeling bug instead of hiding it.
-
-**Migration:** if you want the old behavior, ask for it explicitly.
+where v6 would have quietly corrected it and carried on. The old behavior sounds friendlier but it
+produced wrong answers in the case that actually matters: when your `u0` was correct and a modeling bug
+somewhere else made the system look inconsistent, v6 would "fix" the initial condition to match the buggy
+model and hand you a plausible-looking trajectory. Erroring surfaces the modeling bug. If you want the
+old behavior you can still have it, you just have to ask:
 
 ```julia
 using DiffEqBase: BrownFullBasicInit
 solve(prob, Rodas5P(); initializealg = BrownFullBasicInit())
 ```
 
-This one is a loud break rather than a silent one, which is exactly the point of the change.
-
 ### `VectorContinuousCallback` fires every simultaneous event
 
-Previously, when several conditions of one `VectorContinuousCallback` crossed zero in the same step, only
-the *first* crossing's `affect!` ran. The others were silently dropped even though their roots were inside
-the step. Bouncing-ball models, multi-contact mechanics, and threshold state machines were all affected by
-this. v7 resolves all simultaneous events and dispatches them in a single `affect!` call — which requires
-a new signature:
+This was a real bug rather than a design change. When several conditions of a single
+`VectorContinuousCallback` crossed zero within the same step, only the first crossing's `affect!` ran and
+the rest were silently dropped, even though their roots were inside the step and had been located.
+Bouncing-ball models, multi-contact mechanics and anything using a callback as a threshold state machine
+were all affected.
 
-```julia
-# v6: called once per triggering condition, with that condition's index
-affect!(integrator, event_index::Int)
-
-# v7: called once per step, with a mask over all conditions
-affect!(integrator, simultaneous_events::Vector{Int8})
-```
-
-Each entry is `0` (did not trigger), `+1` (upcrossing), or `-1` (downcrossing). Because the sign carries
-the crossing direction, `affect_neg!` is no longer used for `VectorContinuousCallback` — one function
-handles both directions. (`ContinuousCallback` keeps its `affect!` / `affect_neg!` split.)
+v7 resolves all of them and dispatches them in one call, which needs a new signature. Instead of being
+called once per triggering condition with that condition's index, `affect!` is called once per step with
+a `Vector{Int8}` mask over all conditions, where each entry is `0` for "didn't trigger", `+1` for an
+upcrossing and `-1` for a downcrossing. Since the sign carries the direction, `affect_neg!` is no longer
+used for `VectorContinuousCallback` at all — one function handles both. (`ContinuousCallback` keeps its
+`affect!` / `affect_neg!` split, so this is not a general change.)
 
 ```julia
 # v6
@@ -311,10 +289,10 @@ end
 cb = VectorContinuousCallback(condition, affect!, 2)
 ```
 
-If you are on an early v7 patch, note that the first releases flipped this sign convention; it was
-corrected quickly. Make sure you are on a current v7.1.x.
+The first v7 releases had this sign convention flipped and it was corrected quickly, so make sure you're
+on a current v7.1.x rather than debugging against the initial tag.
 
-### Ensemble `prob_func` / `output_func` signatures
+### Ensembles carry an RNG now
 
 ```julia
 # v6
@@ -324,18 +302,17 @@ prob_func = (prob, i, repeat) -> remake(prob, u0 = rand(length(prob.u0)))
 prob_func = (prob, ctx) -> remake(prob, u0 = rand(ctx.rng, length(prob.u0)))
 ```
 
-`ctx::EnsembleContext` carries `ctx.i` (trajectory index), `ctx.repeat` (retry counter), and `ctx.rng`.
-`output_func(sol, i)` becomes `output_func(sol, ctx)` likewise.
+`ctx::EnsembleContext` has `ctx.i` for the trajectory index, `ctx.repeat` for the retry counter and
+`ctx.rng`, and `output_func(sol, i)` becomes `output_func(sol, ctx)` in the same way. The old signature
+simply had nowhere to thread a reproducible per-trajectory RNG through, which meant ensemble results
+depended on thread count and scheduling — you could not reproduce your own run on a different machine.
+Now `solve(ensemble_prob, alg; seed = 42, trajectories = N)` gives you the same answer regardless of how
+many workers happen to pick up the work.
 
-**Why this is worth the churn:** the old signature had nowhere to plumb a reproducible per-trajectory RNG,
-so ensemble results depended on thread count and scheduling. With `EnsembleContext` you get an RNG derived
-from one top-level seed, and `solve(ensemble_prob, alg; seed = 42, trajectories = N)` reproduces regardless
-of how many workers run.
+### Renames and removals
 
-### Renames, removals, and tableaus
-
-The renames below all already exist under their new names in SciMLBase v2 / OrdinaryDiffEq v6 with
-deprecation warnings, which matters for the upgrade path in the next section:
+These all already exist under their new names on SciMLBase v2 and OrdinaryDiffEq v6 with deprecation
+warnings, which matters for the upgrade path below:
 
 | Old | New |
 |---|---|
@@ -346,39 +323,40 @@ deprecation warnings, which matters for the upgrade path in the next section:
 | `DEProblem` | `AbstractSciMLProblem` |
 | `DESolution` | `AbstractSciMLSolution` |
 | `constructDormandPrince()` | `OrdinaryDiffEqExplicitTableaus.DormandPrince()` |
-| `OrdinaryDiffEq.False()` / `True()` | `Serial()` / `Threaded()` (from FastBroadcast) |
+| `OrdinaryDiffEq.False()` / `True()` | `Serial()` / `Threaded()`, from FastBroadcast |
 
-Tableau functions dropped the `construct` prefix (~80 of them) and are no longer exported, so qualify them
-with the sublibrary. DiffEqDevTools v3 removed its own 105 `construct*` re-exports entirely — the
-authoritative definitions now live only in `OrdinaryDiffEqExplicitTableaus` /
-`OrdinaryDiffEqImplicitTableaus`. `DiffEqDevTools.deduce_Butcher_tableau(alg)` is unchanged.
+Around eighty tableau functions dropped their `construct` prefix and are no longer exported, so qualify
+them with the sublibrary. DiffEqDevTools v3 went further and removed its own 105 `construct*` re-exports
+entirely; the authoritative definitions now live only in `OrdinaryDiffEqExplicitTableaus` and
+`OrdinaryDiffEqImplicitTableaus`. `deduce_Butcher_tableau(alg)` is unchanged.
 
-Also removed: `tuples()`, `intervals()`, `QuadratureProblem` (use `IntegralProblem`), `fastpow` (use
-`FastPower.fastpower`), `concrete_solve` (use `solve`), `syms`/`paramsyms`/`indepsym` kwargs, `sol.x` on
-optimization solutions (use `sol.u`), and the positional `Alg(stage_limiter!, step_limiter!)` constructors
-across 99 explicit RK constructors (use the keyword form).
+Also gone: `tuples()`, `intervals()`, `QuadratureProblem` (use `IntegralProblem`), `fastpow` (use
+`FastPower.fastpower`), `concrete_solve` (use `solve`), the `syms`/`paramsyms`/`indepsym` keyword
+arguments, `sol.x` on optimization solutions (use `sol.u`), and the positional
+`Alg(stage_limiter!, step_limiter!)` constructors across 99 explicit RK methods, which want the keyword
+form now.
 
-One more default change worth knowing: **`williamson_condition` now defaults to `false`** on all 2N
-low-storage RK methods. That optimization only works for mutable `Array`-style state, so having it on by
-default silently misbehaved for `StaticArrays`, GPU arrays, and `ComponentArrays`. Opt back in when you
-know your state is a plain `Array`.
+One more default worth flagging because it's a numerical change rather than an API change:
+`williamson_condition` now defaults to `false` on all 2N low-storage RK methods. That optimization only
+works for mutable `Array`-style state, so having it on by default silently misbehaved for StaticArrays,
+GPU arrays and ComponentArrays. Turn it back on when you know your state is a plain `Array`.
 
-## An import gotcha worth knowing before you start
+## Where things actually live
 
-Several of the replacement types are *not* reachable from a plain `using OrdinaryDiffEq`. Checked on
-v7.1.3:
+A wrinkle that will cost you ten minutes if nobody warns you: several of the replacement types are not
+reachable from a plain `using OrdinaryDiffEq`. Checked on v7.1.3:
 
-| Symbol | Reachable from `using OrdinaryDiffEq`? | Where it lives |
+| Symbol | From `using OrdinaryDiffEq`? | Where it lives |
 |---|---|---|
 | `ODEAliasSpecifier` | yes | — |
 | `successful_retcode`, `ReturnCode` | yes | — |
-| `DEVerbosity` | **no** | `DiffEqBase`, `OrdinaryDiffEqCore` |
-| `PIController`, `PIDController`, `IController` | **no** | `OrdinaryDiffEqCore` |
-| `CheckInit`, `NoInit`, `OverrideInit` | **no** | `SciMLBase`, `DiffEqBase`, `OrdinaryDiffEqCore` |
-| `BrownFullBasicInit` | **no** | `DiffEqBase`, `OrdinaryDiffEqCore` |
-| `Serial`, `Threaded` | **no** | `DiffEqBase` (from `FastBroadcast`) |
+| `DEVerbosity` | no | `DiffEqBase`, `OrdinaryDiffEqCore` |
+| `PIController`, `PIDController`, `IController` | no | `OrdinaryDiffEqCore` |
+| `CheckInit`, `NoInit`, `OverrideInit` | no | `SciMLBase`, `DiffEqBase`, `OrdinaryDiffEqCore` |
+| `BrownFullBasicInit` | no | `DiffEqBase`, `OrdinaryDiffEqCore` |
+| `Serial`, `Threaded` | no | `DiffEqBase`, originally FastBroadcast |
 
-So the migration snippet you would naturally write from the changelog:
+So the snippet you'd naturally write from reading the changelog,
 
 ```julia
 using OrdinaryDiffEq
@@ -386,7 +364,7 @@ solve(prob, Tsit5(); verbose = DEVerbosity(SciMLLogging.None()))
 # ERROR: UndefVarError: `DEVerbosity` not defined in `Main`
 ```
 
-needs an explicit import:
+needs an import:
 
 ```julia
 using OrdinaryDiffEq, SciMLLogging
@@ -394,91 +372,71 @@ using DiffEqBase: DEVerbosity
 solve(prob, Tsit5(); verbose = DEVerbosity(SciMLLogging.None()))
 ```
 
-This is a rough edge in the release rather than an intentional design, and it is being tidied up. Until
-then, if a v7 replacement type gives you an `UndefVarError`, the answer is almost always an explicit
-import from `DiffEqBase` or `OrdinaryDiffEqCore`.
+This is a rough edge from the reorganization rather than anything intentional and it's being tidied up.
+In the meantime, if a v7 replacement type gives you an `UndefVarError`, try `DiffEqBase` first and
+`OrdinaryDiffEqCore` second.
 
-## The recommended upgrade path: do it in two steps
+## Do the upgrade in two steps
 
-Do **not** jump from an old environment straight onto v7. Almost every rename above already exists under
-its new name in **SciMLBase v2 / OrdinaryDiffEq v6**, with deprecation warnings pointing at the exact call
-sites. So:
+Don't jump from an old environment straight onto v7. Nearly every rename in the table above already
+exists under its new name on SciMLBase v2 and OrdinaryDiffEq v6, with deprecation warnings pointing at
+the exact call sites that will break. So stay on v6 first and update to the new names there —
+`has_stats`, `sol.stats`, `AbstractDEAlgorithm`, `derivative_discontinuity!`, `ODEAliasSpecifier`,
+`DEVerbosity`, `ADTypes`-based `autodiff`, explicit controller objects, the new tableau names — and
+change every `sol[i]` to `sol.u[i]` while you're there. Then get your tests passing on v6 with no
+deprecation warnings at all, because those warnings are your migration checklist and a clean run means
+you've worked through it. Only then bump to v7.
 
-1. **Stay on v6.** Update to the new names while the deprecation shims still exist: `has_stats`,
-   `sol.stats`, `AbstractDEAlgorithm`, `derivative_discontinuity!`, `ODEAliasSpecifier`, `DEVerbosity`,
-   `ADTypes`-based `autodiff`, explicit `controller = …` objects, the new tableau names. Change every
-   `sol[i]` to `sol.u[i]` — correct on both versions.
-2. **Get your tests passing on v6 with zero deprecation warnings.** The warnings are your migration
-   checklist.
-3. **Then bump to v7.** What is left is the genuinely new breakage: RAT v4 indexing semantics, the ensemble
-   `prob_func`/`output_func` signature, struct type parameter removals, the `VectorContinuousCallback`
-   signature, and the default changes (`CheckInit`, `williamson_condition`).
+What's left after that is the genuinely new breakage that no deprecation warning could have told you
+about: RAT v4 indexing semantics, the ensemble signature, the struct type parameter removals, the
+`VectorContinuousCallback` signature, and the default changes. That's a much shorter list than the one
+you started with.
 
-Two small steps beat one large one here, mostly because step 2 turns a vague "something changed" into a
-concrete list of file-and-line locations.
-
-Before you start, run these three greps. They cover the silent breakages, which the deprecation warnings
-cannot help you with:
+Before you begin, three greps. These cover the silent changes, which are exactly the ones the deprecation
+warnings can't help you with:
 
 ```
 retcode ==
-sol[            # and length(sol), eachindex(sol), for … in sol
-gamma =         # and qmin, qmax, beta1, beta2, qoldinit in solve calls
+sol[            # also length(sol), eachindex(sol), for … in sol
+gamma =         # also qmin, qmax, beta1, beta2, qoldinit in solve calls
 ```
 
-## DifferentialEquations.jl v8: the umbrella got smaller
+## DifferentialEquations.jl v8
 
-Separately from the v7 changes, `using DifferentialEquations` **no longer re-exports the full SciML solver
-suite**. In v8 it loads only `OrdinaryDiffEq`. Everything else is now an explicit dependency:
+Separately from all of the above, `using DifferentialEquations` no longer re-exports the whole solver
+suite. In v8 it loads `OrdinaryDiffEq` and nothing else, so every other topic is an explicit dependency:
+`StochasticDiffEq` for SDEs, `DelayDiffEq` for DDEs, `BoundaryValueDiffEq` for BVPs, `JumpProcesses` for
+jumps, `SteadyStateDiffEq` for steady states, `Sundials` for CVODE/IDA/ARKODE, and
+`LinearSolve`/`NonlinearSolve`/`Optimization` for the solvers that were never really differential
+equations in the first place.
 
-| Topic | v8 |
-|---|---|
-| ODEs | `using OrdinaryDiffEq` |
-| Stochastic ODEs | `using StochasticDiffEq` |
-| Delay ODEs | `using DelayDiffEq` |
-| Boundary value problems | `using BoundaryValueDiffEq` |
-| Jump processes | `using JumpProcesses` |
-| Steady state | `using SteadyStateDiffEq` |
-| Sundials (CVODE, IDA, ARKODE) | `using Sundials` |
-| Linear / nonlinear / optimization | `using LinearSolve` / `NonlinearSolve` / `Optimization` |
+The umbrella made everyone pay the load time for every solver family and made it genuinely unclear which
+package a given algorithm came from — a question we got asked a lot. Now each topic versions
+independently and your `Project.toml` is honest about what your script uses. The DiffEqDocs solver pages
+annotate every algorithm with its host package.
 
-**Why:** the old umbrella made every user pay the load time for every solver family, and made it unclear
-which package any given algorithm actually came from. Each topic can now version independently, and your
-`Project.toml` becomes honest about what your script actually uses. The DiffEqDocs solver pages annotate
-every algorithm with its host package.
+v7 and v8 are independent of each other, and for ODE-only work I'd skip the umbrella entirely and depend
+on OrdinaryDiffEq directly.
 
-Note that v7 and v8 are independent — you can use OrdinaryDiffEq v7 directly without the umbrella at all,
-which for ODE-only work is what we would suggest.
+Two smaller things in the same family. `DiffEqBase` is now a sublibrary at `lib/DiffEqBase` inside the
+OrdinaryDiffEq monorepo, on the reasoning that it was tightly coupled to OrdinaryDiffEq's internals
+anyway and releasing them in lockstep removes an entire class of compatibility bug. And
+`StochasticDelayDiffEq.jl` is deprecated — use `DelayDiffEq.jl` directly, which has handled SDDE problems
+for some time now. It will not get a v7-compatible release.
 
-Two smaller notes in the same family: `DiffEqBase` is now a sublibrary at `lib/DiffEqBase` inside the
-OrdinaryDiffEq monorepo, because it was tightly coupled to OrdinaryDiffEq internals and lockstep releases
-remove a whole class of compatibility bugs. And `StochasticDelayDiffEq.jl` is deprecated — use
-`DelayDiffEq.jl` directly, which has supported SDDE problems for some time. It will not get a
-v7-compatible release.
+## Was it worth it
 
-## Was it worth it?
+Nearly every individual change above is an instance of one of a few things: cutting time to first solve,
+making `Bool` switches into types the compiler can specialize on, replacing ForwardDiff-shaped keyword
+surfaces with `ADTypes` so every solver generalizes to every backend, turning keyword piles into
+extensible objects, and deleting shims that had been warning for several releases.
 
-The recurring themes across all of the above are worth stating plainly, because nearly every individual
-change is an instance of one of them:
+The migration is real work and the three silent changes deserve a careful pass rather than a version bump
+and a hope. But going through v6's deprecation warnings first makes most of it mechanical, and what you
+get out the other side starts faster, specializes properly, and doesn't have ForwardDiff assumptions
+baked into a hundred struct signatures.
 
-- **Time to first solve.** The scope reduction, `AutoSpecialize` by default, and dropping `Static.jl`,
-  `StaticArrayInterface.jl`, `Polyester.jl`, and `StaticArrays.jl` as direct dependencies. Less code
-  loaded, more precompilation actually cached.
-- **Type stability.** Every `Bool`-as-a-switch became a typed object, so the compiler specializes on the
-  choice instead of branching at runtime.
-- **Generality beyond ForwardDiff.** `ADTypes` everywhere means every solver gets every AD backend for
-  free, instead of a ForwardDiff-shaped keyword surface on every constructor.
-- **Objects instead of keyword piles.** Controllers, alias specifiers, and verbosity settings became real
-  extensible types rather than growing `solve`'s keyword list forever.
-- **Paying off deprecations.** A lot of v7 is simply deleting shims that had been warning for one or more
-  minor releases.
-
-The migration is real work, and the three silent breakages in particular deserve a careful pass rather than
-a version bump and a hope. But the two-step path through v6's deprecation warnings makes most of it
-mechanical, and the result is a stack that starts faster, specializes better, and no longer has
-ForwardDiff assumptions baked into a hundred struct signatures.
-
-If you hit something this post does not cover, the [full `NEWS.md`](https://github.com/SciML/OrdinaryDiffEq.jl/blob/master/NEWS.md)
-is the exhaustive reference, and questions are welcome on
-[the SciML Zulip](https://julialang.zulipchat.com/#narrow/stream/279055-sciml-bridged) or in a
+If you hit something this post doesn't cover, the [full `NEWS.md`](https://github.com/SciML/OrdinaryDiffEq.jl/blob/master/NEWS.md)
+is the exhaustive version, and questions are always welcome on
+[the SciML Zulip](https://julialang.zulipchat.com/#narrow/stream/279055-sciml-bridged) or as a
 [GitHub issue](https://github.com/SciML/OrdinaryDiffEq.jl/issues).
