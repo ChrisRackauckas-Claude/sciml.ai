@@ -15,7 +15,7 @@ disclosed. Any use of AI tools that is undisclosed and discovered can give
 a disqualification from all future programs. We note that most of the projects
 which are posted as part of these programs have already been attempted using the
 latest state-of-the-art AI tools, and thus one should know that it is unlikely
-they will be successful only using the AI without some form of expert guidence
+they will be successful only using the AI without some form of expert guidance
 and human intervention.
 
 ## SciML Small Grants Program
@@ -69,7 +69,7 @@ and what is planned to work on for the summer.
 For information on possible projects, please look at the Google Summer of Code and
 Google Season of Docs project lists for more information.
 
-Note that the definition of summer is left purposely vague to accomodate the differing
+Note that the definition of summer is left purposely vague to accommodate the differing
 schedules of university students.
 
 ## Google Summer of Code

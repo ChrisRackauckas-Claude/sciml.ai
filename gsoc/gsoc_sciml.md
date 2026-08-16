@@ -5,7 +5,7 @@
 
 ## Modelingtoolkit based Parser for Physics Informed Neural Networks (PINNs)
 
-[NeuralPDE.jl](https://github.com/SciML/NeuralPDE.jl) uses [ModelingTookit.jl](https://github.com/SciML/ModelingToolkit.jl) to define differential equations for solving PINNs. Currently, the loss functions for PINNs are constructed manually, which limits their applicability to a specific subset of systems. By utilizing ModelingToolkit.jl, loss functions could be generated symbolically, enabling broader generalization across diverse systems and improving flexibility. To achieve this, parsing the equations symbolically is essential.
+[NeuralPDE.jl](https://github.com/SciML/NeuralPDE.jl) uses [ModelingToolkit.jl](https://github.com/SciML/ModelingToolkit.jl) to define differential equations for solving PINNs. Currently, the loss functions for PINNs are constructed manually, which limits their applicability to a specific subset of systems. By utilizing ModelingToolkit.jl, loss functions could be generated symbolically, enabling broader generalization across diverse systems and improving flexibility. To achieve this, parsing the equations symbolically is essential.
 
 **Recommended Skills**: Background knowledge in symbolics and machine learning.
 

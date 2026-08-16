@@ -6,7 +6,7 @@ Plug in specific meta information for a blog page. The `meta` local page
 variable should be given as a list of tuples of pairs like so:
 ```
 @def meta = [("property"=>"og:video", "content"=>"http://example.com/"),
-             ("propery"=>"og:title", "content"=>"The Rock")]
+             ("property"=>"og:title", "content"=>"The Rock")]
 ```
 """
 function hfun_meta()
@@ -49,13 +49,13 @@ Plug in the list of blog posts contained in the `/blog/` folder.
                 # check the posts in the folder
                 posts = filter!(p -> endswith(p, ".md"), readdir(base))
                 for post in posts
-                    ps       = splitext(post)[1]
-                    url      = "/news/$ys/$ms/$ds/$ps/"
-                    surl     = strip(url, '/')
-                    title    = pagevar(surl, :title)
-                    author   = pagevar(surl, :author)
+                    ps = splitext(post)[1]
+                    url = "/news/$ys/$ms/$ds/$ps/"
+                    surl = strip(url, '/')
+                    title = pagevar(surl, :title)
+                    author = pagevar(surl, :author)
                     isnothing(author) && (author = "")
-                    pubdate  = "$ys-$ms-$ds"
+                    pubdate = "$ys-$ms-$ds"
                     write(io, "\n[$title]($url) $author ($pubdate) \n")
                 end
             end
@@ -63,7 +63,7 @@ Plug in the list of blog posts contained in the `/blog/` folder.
     end
     # markdown conversion adds `<p>` beginning and end but
     # we want to  avoid this to avoid an empty separator
-    r = Franklin.fd2html(String(take!(io)), internal=true)
+    r = Franklin.fd2html(String(take!(io)), internal = true)
     return r
 end
 
@@ -87,7 +87,7 @@ function hfun_blog_post_redirects()
             fullpath = joinpath(root, file)
             fullpath == joinpath(basepath, "news", "index.md") && continue
             # relative path: /news/...
-            relpath = splitext(fullpath[length(basepath)+1:end])[1]
+            relpath = splitext(fullpath[(length(basepath) + 1):end])[1]
             dst = joinpath(basepath, "__site", strip(relpath, '/') * ".html")
             isfile(dst) && continue
             mkpath(splitdir(dst)[1])
@@ -98,20 +98,20 @@ function hfun_blog_post_redirects()
 end
 
 function hfun_add_redirects()
-  basepath = Franklin.FOLDER_PATH[]
-  for n in readdir(basepath)
-    endswith(n, ".md") || continue
-    n in ("index.md", "config.md") && continue
-    name = splitext(n)[1]
-    dst = joinpath(basepath, "__site", name * ".html")
-    isfile(dst) && continue
-    prepath = globvar("prepath")
-    pre = ""
-    if prepath !== nothing && !isempty(prepath)
-      pre = "/" * strip(prepath, '/')
+    basepath = Franklin.FOLDER_PATH[]
+    for n in readdir(basepath)
+        endswith(n, ".md") || continue
+        n in ("index.md", "config.md") && continue
+        name = splitext(n)[1]
+        dst = joinpath(basepath, "__site", name * ".html")
+        isfile(dst) && continue
+        prepath = globvar("prepath")
+        pre = ""
+        if prepath !== nothing && !isempty(prepath)
+            pre = "/" * strip(prepath, '/')
+        end
+        s = redirect("$pre/$name/")
+        write(dst, s)
     end
-    s = redirect("$pre/$name/")
-    write(dst, s)
-  end
-  return ""
+    return ""
 end

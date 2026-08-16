@@ -22,7 +22,7 @@ Here are some possible projects:
 
 The SciML organization hosts the [Tutorials and Showcase examples](https://docs.sciml.ai/Overview/stable/showcase/showcase/)
 which demonstrate cross-cutting applications from automating the discovery of relativitistic
-corrections to black hole phyiscs to GPU accelerating pharmacometric intervention analysis.
+corrections to black hole physics to GPU accelerating pharmacometric intervention analysis.
 However, there are so many domains that could be covered in more depth, like:
 
 - Tutorials walking users through optimizing solvers for partial differential equations

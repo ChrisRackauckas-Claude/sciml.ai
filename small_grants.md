@@ -157,7 +157,7 @@ fixing, etc. as these projects were chosen due to the fact that the maintainers 
 able to find the time to cover these areas. The obligation of the reviewer is to give a
 timely feedback on what the requirements for merging would be (i.e. what tests are required
 to be added, whether certain code meets style demands, etc.) so that the contributor can
-achieve a mergable PR within the time frame, but there is no expectation that the reviewer
+achieve a mergeable PR within the time frame, but there is no expectation that the reviewer
 will "go the extra mile" to teach the contributor how the package or mathematics works.
 
 # List of Current Projects
@@ -594,7 +594,7 @@ Completed by Utsav Ojha(Github:- https://github.com/ajatshatru01 )
 
 `DataInterpolations.jl` is a SciML repository for interpolating 1D data. It supports a wide number of interpolation types, as well as taking first and second derivatives of the interpolations. Specifically, the BSplineInterpoation has a few bugs with regards to where it puts the control points, and how it calculates derivatives.
 
-**Information to Get Started**: See the issue https://github.com/SciML/DataInterpolations.jl/issues/419 describes the issue and a proposed solution. Specifically, this work will likely start by mirroring https://github.com/SciML/DataInterpolationsND.jl/pull/20 and re-enabling the derviative tests for BSpline interpolations.
+**Information to Get Started**: See the issue https://github.com/SciML/DataInterpolations.jl/issues/419 describes the issue and a proposed solution. Specifically, this work will likely start by mirroring https://github.com/SciML/DataInterpolationsND.jl/pull/20 and re-enabling the derivative tests for BSpline interpolations.
 
 **Success Criteria**: Merged pull request(https://github.com/SciML/DataInterpolations.jl/pull/502 ) which fixes and clarifies the numerical issues
 

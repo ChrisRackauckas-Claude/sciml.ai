@@ -4,7 +4,7 @@
 
 [Matrix calculus](https://www.matrixcalculus.org/matrixCalculus) is the ability to do calculus
 directly on matrix expressions rather than requiring the performance of the calculus on the
-scalar quantities. For example, `x'*A*x + c*sin(y)'*x` differntiates to `2*A*x + c*sin(y)`.
+scalar quantities. For example, `x'*A*x + c*sin(y)'*x` differentiates to `2*A*x + c*sin(y)`.
 Currently, Symbolics.jl does not support matrix calculus, only scalar calculus, so the work
 would be to expand the support to include handling of symbolic matrices.
 
