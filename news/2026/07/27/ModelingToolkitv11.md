@@ -78,10 +78,10 @@ both developer and government requirements for commercialization. While many may
 supports open source software development and would prefer for this software to be distributed as free under a
 permissive license, the reality is that government contracts and grants often have requirements for 
 commercialization. For full transparency, ModelingToolkit.jl has required about 3 full-time expert/senior
-developers for the last 5 years, and the funding for this project has totaled around ~$250k (after overhead) of
+developers for the last 5 years, and the funding for this project has totaled around ~\$250k (after overhead) of
 government grants directed to the non-commercial aspects of the project (we thank Bernt Lie for his early
 contributions via DigiWell and Chris Tessum for co-PIing on a related NSF grant). We additionally note that 
-total donations to the project have been <$10k over the full 10 years. 
+total donations to the project have been <\$10k over the full 10 years. 
 
 As one may guess, 15 developer
 years for the top developers of the SciML space was not able to be sustained on that budget, and thus
@@ -89,7 +89,7 @@ most of the shortfall was made up through commercial contracts and grants with c
 grants from DARPA and ARPA-E. However, these grants and contracts often have requirements for commercialization
 and thus items around ModelingToolkit.jl have repeatedly required to be removed from the grant scope due to
 reviewer feedback suggesting that these activities do not fall under the required commercialization scope. That
-is not to mention all of the lost funding due to this sustainability issue: in particular about $6 million of
+is not to mention all of the lost funding due to this sustainability issue: in particular about \$6 million of
 grants on the topic of improvements to ModelingToolkit.jl were denied this year. The repeated main reasoning
 has been the lack of measures addressing the commercialization sustainability requirements of the funding agencies,
 citing the fact that the liberal MIT license would allow competitors and large companies who do not contribute
@@ -207,7 +207,7 @@ allows for alternative plugin packages to add steps to the compilation. The new 
 JuliaHub-managed pass packages), is one such pass library
 that is being shipped that has the ability to ensure that array code is optimized, including doing things like
 using a bump allocator in order to achieve performance to pre-allocated code, using in-place mutating operators
-in the generated code. It will soon do things like automatically swap small operations, such as `\` of 4x4 rotation
+in the generated code. It will soon do things like automatically swap small operations, such as `\ ` of 4x4 rotation
 matrices, to change them into static array operations. As such, it effectively transforms symbolic mathematical
 expressions into the kind of StaticArray.jl + specialized LinearSolve.jl + tensor contracted + etc. code that
 you would expect expert Julia users to write. On top of this, the library is scheduled to allow for Reactant.jl
